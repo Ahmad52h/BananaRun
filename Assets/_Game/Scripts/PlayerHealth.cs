@@ -1,0 +1,64 @@
+using System;
+using UnityEngine;
+
+[RequireComponent(typeof(RunnerMotor))]
+[RequireComponent(typeof(RunnerInput))]
+public class PlayerHealth : MonoBehaviour
+{
+    [SerializeField, Min(1)] private int maxHearts = 3;
+
+    [SerializeField, Min(0f)]
+    private float protectionDuration = 2f;
+
+    public int Hearts { get; private set; }
+    public int MaxHearts => maxHearts;
+    public bool IsRunOver { get; private set; }
+    public bool IsDead => Hearts <= 0;
+    public bool IsProtected => Time.time < protectionEndsAt;
+
+    public event Action<int> HeartsChanged;
+    public event Action Died;
+
+    private float protectionEndsAt;
+    private RunnerMotor motor;
+    private RunnerInput runnerInput;
+
+    private void Awake()
+    {
+        Hearts = maxHearts;
+
+        motor = GetComponent<RunnerMotor>();
+        runnerInput = GetComponent<RunnerInput>();
+    }
+
+    public void TakeHit()
+    {
+        if (IsRunOver || IsProtected)
+            return;
+
+        Hearts--;
+        protectionEndsAt = Time.time + protectionDuration;
+
+        if (IsDead)
+        {
+            EndRun();
+        }
+
+        HeartsChanged?.Invoke(Hearts);
+
+        if (IsDead)
+        {
+            Died?.Invoke();
+        }
+    }
+    public void EndRun()
+    {
+        if (IsRunOver)
+            return;
+
+        IsRunOver = true;
+
+        motor.enabled = false;
+        runnerInput.enabled = false;
+    }
+}

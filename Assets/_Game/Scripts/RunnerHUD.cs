@@ -1,0 +1,84 @@
+using TMPro;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class RunnerHUD : MonoBehaviour
+{
+    [SerializeField] private PlayerHealth health;
+    [SerializeField] private TMP_Text heartsText;
+    [SerializeField] private GameObject gameOverPanel;
+
+    [Header("Result")]
+    [SerializeField] private TMP_Text resultText;
+
+    private bool restarting;
+
+    private void Awake()
+    {
+        gameOverPanel.SetActive(false);
+    }
+
+    private void OnEnable()
+    {
+        health.HeartsChanged += UpdateHearts;
+        health.Died += ShowGameOver;
+    }
+
+    private void Start()
+    {
+        UpdateHearts(health.Hearts);
+    }
+
+    private void Update()
+    {
+        heartsText.color =
+            health.IsProtected && !health.IsRunOver
+            ? Color.yellow
+            : Color.white;
+    }
+
+    private void OnDisable()
+    {
+        health.HeartsChanged -= UpdateHearts;
+        health.Died -= ShowGameOver;
+    }
+
+    private void UpdateHearts(int hearts)
+    {
+        heartsText.text =
+            $"Hearts: {hearts}/{health.MaxHearts}";
+    }
+
+    private void ShowGameOver()
+    {
+        resultText.text = "GAME OVER";
+        gameOverPanel.SetActive(true);
+    }
+
+    public void ShowFinishResult(
+        bool won,
+        int collected,
+        int required)
+    {
+        string title = won
+            ? "LEVEL COMPLETE!"
+            : "NOT ENOUGH BANANAS";
+
+        resultText.text =
+            $"{title}\nBananas: {collected}/{required}";
+
+        gameOverPanel.SetActive(true);
+    }
+
+    public void Retry()
+    {
+        if (restarting)
+            return;
+
+        restarting = true;
+
+        SceneManager.LoadScene(
+            SceneManager.GetActiveScene().buildIndex
+        );
+    }
+}
