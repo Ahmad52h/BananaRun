@@ -1,12 +1,15 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class RunnerHUD : MonoBehaviour
 {
     [SerializeField] private PlayerHealth health;
     [SerializeField] private TMP_Text heartsText;
     [SerializeField] private GameObject gameOverPanel;
+    [SerializeField] private CoconutThrower coconutThrower;
+    [SerializeField] private Button throwButton;
 
     [Header("Result")]
     [SerializeField] private TMP_Text resultText;
@@ -35,6 +38,7 @@ public class RunnerHUD : MonoBehaviour
             health.IsProtected && !health.IsRunOver
             ? Color.yellow
             : Color.white;
+        throwButton.interactable = coconutThrower.CanThrow;
     }
 
     private void OnDisable()

@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using System.Collections.Generic;
+using UnityEngine.EventSystems;
 
 [RequireComponent(typeof(RunnerMotor))]
 public class RunnerInput : MonoBehaviour
@@ -19,6 +21,8 @@ public class RunnerInput : MonoBehaviour
 
     private Vector2 swipeStart;
     private bool trackingSwipe;
+    private readonly List<RaycastResult> uiHits =
+    new List<RaycastResult>();
 
     private void Awake()
     {
@@ -86,7 +90,7 @@ public class RunnerInput : MonoBehaviour
         if (pointerPress.WasPressedThisFrame())
         {
             swipeStart = pointerPosition.ReadValue<Vector2>();
-            trackingSwipe = true;
+            trackingSwipe = !StartedOverUI(swipeStart);
         }
 
         if (!trackingSwipe)
@@ -123,5 +127,20 @@ public class RunnerInput : MonoBehaviour
     {
         if (!hasFocus)
             trackingSwipe = false;
+    }
+    private bool StartedOverUI(Vector2 position)
+    {
+        if (EventSystem.current == null)
+            return false;
+
+        PointerEventData pointer =
+            new PointerEventData(EventSystem.current);
+
+        pointer.position = position;
+
+        uiHits.Clear();
+        EventSystem.current.RaycastAll(pointer, uiHits);
+
+        return uiHits.Count > 0;
     }
 }
