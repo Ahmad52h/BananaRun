@@ -9,7 +9,7 @@ public class BananaInventory : MonoBehaviour
 
     public void AddBananas(int amount)
     {
-        if (amount <= 0)
+        if (!isActiveAndEnabled || amount <= 0)
             return;
 
         Count += amount;
