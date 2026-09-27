@@ -39,6 +39,6 @@ public class BananaCounterUI : MonoBehaviour
 
     private void Refresh(int count)
     {
-        label.text = $"Bananas: {count}";
+        label.text = count.ToString();
     }
 }

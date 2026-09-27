@@ -10,6 +10,14 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private GameObject gameOverPanel;
     [SerializeField] private CoconutThrower coconutThrower;
     [SerializeField] private Button throwButton;
+    [Header("Heart Icons")]
+    [SerializeField] private Image[] heartIcons;
+
+    [SerializeField] private Color fullHeartColor = Color.white;
+
+    [SerializeField]
+    private Color emptyHeartColor =
+        new Color(0.25f, 0.25f, 0.25f, 0.45f);
 
     [Header("Result")]
     [SerializeField] private TMP_Text resultText;
@@ -49,8 +57,26 @@ public class RunnerHUD : MonoBehaviour
 
     private void UpdateHearts(int hearts)
     {
-        heartsText.text =
-            $"Hearts: {hearts}/{health.MaxHearts}";
+        if (heartsText != null)
+        {
+            heartsText.text =
+                $"Hearts: {hearts}/{health.MaxHearts}";
+        }
+
+        if (heartIcons == null)
+            return;
+
+        for (int i = 0; i < heartIcons.Length; i++)
+        {
+            Image icon = heartIcons[i];
+
+            if (icon == null)
+                continue;
+
+            icon.color = i < hearts
+                ? fullHeartColor
+                : emptyHeartColor;
+        }
     }
 
     private void ShowGameOver()
