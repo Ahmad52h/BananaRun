@@ -30,6 +30,7 @@ public class FinishGate : MonoBehaviour
     private float visualScale = 1f;
 
     private bool completed;
+    public bool Completed => completed;
 
     private void Awake()
     {

@@ -18,6 +18,22 @@ public class RunnerMotor : MonoBehaviour
     private int currentLane;
     private float centerX;
     private float verticalVelocity;
+    private float slowdownStarted;
+    private float slowdownDuration;
+    private float slowdownMultiplier = 1f;
+
+    public float LaneDistance => laneDistance;
+    public float ForwardSpeed => forwardSpeed;
+    public float CurrentSpeed => forwardSpeed * (slowdownDuration > 0f
+        ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
+        : 1f);
+
+    public void ApplySlowdown(float multiplier, float duration)
+    {
+        slowdownMultiplier = Mathf.Clamp01(multiplier);
+        slowdownDuration = Mathf.Max(0f, duration);
+        slowdownStarted = Time.time;
+    }
 
     private void Awake()
     {
@@ -53,7 +69,7 @@ public class RunnerMotor : MonoBehaviour
         Vector3 movement = new Vector3(
             nextX - transform.position.x,
             verticalVelocity * deltaTime,
-            forwardSpeed * deltaTime
+            CurrentSpeed * deltaTime
         );
 
         CollisionFlags collisions = controller.Move(movement);

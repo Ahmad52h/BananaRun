@@ -18,6 +18,7 @@ public class PlayerHealth : MonoBehaviour
 
     public event Action<int> HeartsChanged;
     public event Action Died;
+    public event Action HitTaken;
 
     private float protectionEndsAt;
     private RunnerMotor motor;
@@ -38,6 +39,7 @@ public class PlayerHealth : MonoBehaviour
 
         Hearts--;
         protectionEndsAt = Time.time + protectionDuration;
+        HitTaken?.Invoke();
 
         if (IsDead)
         {

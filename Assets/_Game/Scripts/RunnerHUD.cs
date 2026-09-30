@@ -108,7 +108,7 @@ public class RunnerHUD : MonoBehaviour
         restarting = true;
 
         SceneManager.LoadScene(
-            SceneManager.GetActiveScene().buildIndex
+            SceneManager.GetActiveScene().name
         );
     }
 }
