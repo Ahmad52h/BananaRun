@@ -13,6 +13,9 @@ public class RunnerMotor : MonoBehaviour
     [Header("Jump")]
     [SerializeField, Min(0.1f)] private float jumpHeight = 2f;
     [SerializeField] private float gravity = -25f;
+    [Header("Slide")]
+    [SerializeField, Min(0.1f)] private float slideDuration = 0.75f;
+    [SerializeField, Min(0.5f)] private float slideHeight = 0.8f;
 
     private CharacterController controller;
     private int currentLane;
@@ -21,9 +24,18 @@ public class RunnerMotor : MonoBehaviour
     private float slowdownStarted;
     private float slowdownDuration;
     private float slowdownMultiplier = 1f;
+    private PowerUpManager powerUps;
+    private float standingHeight;
+    private Vector3 standingCenter;
+    private float slideEndsAt;
+    private bool sliding;
 
     public float LaneDistance => laneDistance;
     public float ForwardSpeed => forwardSpeed;
+    public float BaseGravity => gravity;
+    public bool IsSliding => sliding;
+    public float EffectiveGravity => gravity * (powerUps != null && powerUps.IsActive(PowerUpType.Glider) &&
+        controller != null && !controller.isGrounded ? 0.35f : 1f);
     public float CurrentSpeed => forwardSpeed * (slowdownDuration > 0f
         ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
         : 1f);
@@ -38,6 +50,9 @@ public class RunnerMotor : MonoBehaviour
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
+        powerUps = GetComponent<PowerUpManager>();
+        standingHeight = controller.height;
+        standingCenter = controller.center;
 
         // The starting position defines the center lane.
         centerX = transform.position.x;
@@ -51,12 +66,14 @@ public class RunnerMotor : MonoBehaviour
         if (deltaTime <= 0f)
             return;
 
+        if (sliding && Time.time >= slideEndsAt) EndSlide();
+
         if (controller.isGrounded && verticalVelocity < 0f)
         {
             verticalVelocity = -2f;
         }
 
-        verticalVelocity += gravity * deltaTime;
+        verticalVelocity += EffectiveGravity * deltaTime;
 
         float targetX = centerX + currentLane * laneDistance;
 
@@ -92,7 +109,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (!controller.isGrounded)
+        if (sliding || !controller.isGrounded)
             return;
 
         verticalVelocity = Mathf.Sqrt(
@@ -100,8 +117,36 @@ public class RunnerMotor : MonoBehaviour
         );
     }
 
+    public bool Slide()
+    {
+        if (!isActiveAndEnabled || sliding || !controller.enabled || !controller.isGrounded)
+            return false;
+        sliding = true;
+        slideEndsAt = Time.time + slideDuration;
+        float height = Mathf.Max(controller.radius * 2f, Mathf.Min(slideHeight, standingHeight));
+        float bottom = standingCenter.y - standingHeight * 0.5f;
+        controller.height = height;
+        controller.center = new Vector3(standingCenter.x, bottom + height * 0.5f, standingCenter.z);
+        return true;
+    }
+
+    private void EndSlide()
+    {
+        sliding = false;
+        controller.height = standingHeight;
+        controller.center = standingCenter;
+    }
+
+    private void OnDisable()
+    {
+        if (sliding && controller != null) EndSlide();
+    }
+
+    public void ResetVerticalVelocity() => verticalVelocity = -2f;
+
     private void OnValidate()
     {
         gravity = Mathf.Min(gravity, -0.1f);
+        slideHeight = Mathf.Min(slideHeight, GetComponent<CharacterController>()?.height ?? 2f);
     }
 }

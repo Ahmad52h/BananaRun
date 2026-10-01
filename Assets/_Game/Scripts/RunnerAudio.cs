@@ -14,6 +14,14 @@ public class RunnerAudio : MonoBehaviour
     [SerializeField] private bool playMusicOnStart = true;
     [SerializeField] private AudioSource musicSource;
     [SerializeField] private AudioSource effectsSource;
+    [Header("Musical Banana Combo")]
+    [SerializeField, Min(0.1f)] private float comboResetSeconds = 1.2f;
+    [SerializeField] private float[] bananaPitchScale = { 1f, 1.125f, 1.25f, 1.333f, 1.5f, 1.667f, 1.875f, 2f };
+
+    private int bananaCombo;
+    private float lastBananaTime = float.NegativeInfinity;
+    public int BananaCombo => bananaCombo;
+    public float LastBananaPitch { get; private set; } = 1f;
 
     private void Awake()
     {
@@ -47,12 +55,19 @@ public class RunnerAudio : MonoBehaviour
     {
         var clip = overrideClip != null ? overrideClip : bananaCollect;
         if (!isActiveAndEnabled || effectsSource == null || clip == null) return;
+        bananaCombo = Time.time - lastBananaTime <= comboResetSeconds ? bananaCombo + 1 : 1;
+        lastBananaTime = Time.time;
+        int index = Mathf.Min(bananaCombo - 1, bananaPitchScale == null ? 0 : bananaPitchScale.Length - 1);
+        LastBananaPitch = bananaPitchScale != null && bananaPitchScale.Length > 0
+            ? Mathf.Clamp(bananaPitchScale[index], 0.5f, 2f) : 1f;
+        effectsSource.pitch = LastBananaPitch;
         effectsSource.PlayOneShot(clip, bananaVolume);
     }
 
     private void OnValidate()
     {
         if (musicSource != null) musicSource.volume = musicVolume;
+        comboResetSeconds = Mathf.Max(0.1f, comboResetSeconds);
     }
 
     private void OnDisable()

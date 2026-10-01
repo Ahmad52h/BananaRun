@@ -14,7 +14,8 @@ public class PlayerHealth : MonoBehaviour
     public int MaxHearts => maxHearts;
     public bool IsRunOver { get; private set; }
     public bool IsDead => Hearts <= 0;
-    public bool IsProtected => Time.time < protectionEndsAt;
+    public bool IsProtected => Time.time < protectionEndsAt ||
+        (powerUps != null && powerUps.IsActive(PowerUpType.Bulldozer));
 
     public event Action<int> HeartsChanged;
     public event Action Died;
@@ -23,6 +24,7 @@ public class PlayerHealth : MonoBehaviour
     private float protectionEndsAt;
     private RunnerMotor motor;
     private RunnerInput runnerInput;
+    private PowerUpManager powerUps;
 
     private void Awake()
     {
@@ -30,6 +32,7 @@ public class PlayerHealth : MonoBehaviour
 
         motor = GetComponent<RunnerMotor>();
         runnerInput = GetComponent<RunnerInput>();
+        powerUps = GetComponent<PowerUpManager>();
     }
 
     public void TakeHit()

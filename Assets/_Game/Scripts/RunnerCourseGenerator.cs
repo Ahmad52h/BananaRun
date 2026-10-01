@@ -17,6 +17,10 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private GameObject[] obstaclePrefabs;
     [SerializeField] private GameObject bananaPrefab;
     [SerializeField] private GameObject coconutPrefab;
+    [SerializeField] private PowerUpPickup[] powerUpPrefabs;
+    [SerializeField] private FallingCoconutHazard fallingCoconutPrefab;
+    [SerializeField] private float gapStart = 610f;
+    [SerializeField] private float gapEnd = 642f;
     [SerializeField, Min(8f)] private float minimumSpacing = 12f;
     [SerializeField, Min(8f)] private float maximumSpacing = 20f;
     [Header("Scenery")]
@@ -39,6 +43,11 @@ public class RunnerCourseGenerator : MonoBehaviour
         int row = 0;
         while (z < end)
         {
+            if (z > gapStart - 18f && z < gapEnd + 18f)
+            {
+                z = gapEnd + 20f;
+                continue;
+            }
             // A safe lane moves at most one lane per row. Every row has a clear route.
             int safeLane = Mathf.Clamp(lastSafeLane + random.Next(-1, 2), -1, 1);
             int pattern = row % 4;
@@ -51,6 +60,15 @@ public class RunnerCourseGenerator : MonoBehaviour
                 for (int b = 0; b < 3; b++) SpawnPickup(bananaPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.1f, z - 4 + b * 2.5f));
             if (coconutPrefab != null && row % 5 == 0)
                 SpawnPickup(coconutPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
+            if (powerUpPrefabs != null && powerUpPrefabs.Length >= 3)
+            {
+                int kind = row == 4 ? 0 : row == 9 ? 2 : row == 15 ? 1 : -1;
+                if (kind >= 0 && powerUpPrefabs[kind] != null)
+                    Instantiate(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 5), Quaternion.identity, transform);
+            }
+            if (bananaPrefab != null && row >= 15 && row <= 17)
+                for (int b = 0; b < 4; b++) SpawnPickup(bananaPrefab,
+                    new Vector3(centerX + safeLane * laneWidth, groundHeight + 2.2f + Mathf.Sin(b / 3f * Mathf.PI) * 1.8f, z + 5 + b * 2.2f));
             lastSafeLane = safeLane;
             row++;
             z += Mathf.Lerp(minimumSpacing, Mathf.Max(minimumSpacing, maximumSpacing), (float)random.NextDouble());
@@ -60,12 +78,24 @@ public class RunnerCourseGenerator : MonoBehaviour
         for (z = startDistance - 10; z < finishLine.position.z + 15; z += Mathf.Max(6, scenerySpacing))
             for (int side = -1; side <= 1; side += 2)
             {
+                if (z > gapStart - 2f && z < gapEnd + 2f) continue;
                 var prefab = sceneryPrefabs[random.Next(sceneryPrefabs.Length)];
                 if (prefab == null) continue;
                 var tree = Instantiate(prefab, new Vector3(centerX + side * (7f + (float)random.NextDouble() * 5f), groundHeight, z),
                     Quaternion.Euler(0, random.Next(360), 0), transform);
                 tree.transform.localScale *= Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble());
                 foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                if (fallingCoconutPrefab != null && Mathf.RoundToInt(z / scenerySpacing) % 8 == 0 && side < 0)
+                {
+                    // Use the tropical palm for the dropping tree, even if this row chose another tree.
+                    if (sceneryPrefabs[0] != null && prefab != sceneryPrefabs[0])
+                    {
+                        Destroy(tree);
+                        tree = Instantiate(sceneryPrefabs[0], new Vector3(centerX + side * 8f, groundHeight, z), Quaternion.identity, transform);
+                        foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                    }
+                    tree.AddComponent<FallingCoconutSpawner>().Configure(player, fallingCoconutPrefab, random.Next(-1, 2));
+                }
                 var outerTree = Instantiate(prefab, new Vector3(centerX + side * (17f + (float)random.NextDouble() * 4f), groundHeight, z + 5),
                     Quaternion.Euler(0, random.Next(360), 0), transform);
                 foreach (var collider in outerTree.GetComponentsInChildren<Collider>()) collider.enabled = false;

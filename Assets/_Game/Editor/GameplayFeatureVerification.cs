@@ -97,7 +97,9 @@ public static class GameplayFeatureVerification
                         CheckLane(box.bounds, obstacles, motor.LaneDistance);
                     }
                     Check(true, "Every obstacle row leaves at least one lane clear.");
-                    Check(GameObject.Find("Ground").GetComponent<Collider>().bounds.max.z > 900, "Running surface extends beyond the finish.");
+                    var landingGround = GameObject.Find("Landing Ground");
+                    Check(landingGround != null && landingGround.GetComponent<Collider>().bounds.max.z > 900,
+                        "Landing surface extends beyond the finish.");
                     var audio = RunnerAudio.Instance;
                     Check(audio != null && audio.GetComponents<AudioSource>().Any(s => s.isPlaying && s.loop && s.clip != null), "Assigned background music is looping.");
                     Check(animator.runtimeAnimatorController.animationClips.Any(c => c.name == "MonkeyStumble" && c.humanMotion), "Stumble clip is a valid humanoid motion.");

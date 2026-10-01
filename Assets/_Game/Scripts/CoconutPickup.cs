@@ -28,7 +28,7 @@ public class CoconutPickup : MonoBehaviour
         CoconutThrower thrower =
             other.GetComponentInParent<CoconutThrower>();
 
-        if (thrower == null || !thrower.TryCollect())
+        if (thrower == null || !thrower.CompareTag("Player") || !thrower.TryCollect())
             return;
 
         collected = true;

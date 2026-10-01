@@ -109,3 +109,5 @@ MonoBehaviour:
   obstacleMask:
     serializedVersion: 2
     m_Bits: 8
+  smashBoxSound: {fileID: 8300000, guid: 487b64ada52656844bd4b3dc5f041a45, type: 3}
+  smashVolume: 1

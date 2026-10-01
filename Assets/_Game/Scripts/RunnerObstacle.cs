@@ -8,6 +8,7 @@ public class RunnerObstacle : MonoBehaviour
     [Header("Break Rewards")]
     [SerializeField] private CrateBreakEffect breakEffectPrefab;
     [SerializeField] private GameObject bananaPrefab;
+    [SerializeField] private CoconutPickup coconutPrefab;
     [SerializeField] private Transform bananaSpawnPoint;
     [SerializeField] private Transform bananaLandingPoint;
 
@@ -41,14 +42,30 @@ public class RunnerObstacle : MonoBehaviour
         if (health == null || health.IsRunOver)
             return;
 
+        var powers = health.GetComponent<PowerUpManager>();
+        if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
+        {
+            powers.AwardBulldozerPoints();
+            Shatter();
+            return;
+        }
+
         touched = true;
         health.TakeHit();
     }
 
-    public void TryBreak()
+    public bool TryBreak()
     {
         if (!breakable || broken)
-            return;
+            return false;
+
+        Shatter();
+        return true;
+    }
+
+    public void Shatter()
+    {
+        if (broken) return;
 
         broken = true;
 
@@ -91,6 +108,13 @@ public class RunnerObstacle : MonoBehaviour
                 pop = banana.AddComponent<BananaPop>();
 
             pop.Initialize(target);
+        }
+
+        if (coconutPrefab != null)
+        {
+            // Drop it beyond the crate, in the same lane and at pickup height.
+            Vector3 rewardPosition = new Vector3(bounds.center.x, bounds.min.y + 0.8f, bounds.max.z + 2.4f);
+            Instantiate(coconutPrefab, rewardPosition, Quaternion.identity);
         }
 
         gameObject.SetActive(false);

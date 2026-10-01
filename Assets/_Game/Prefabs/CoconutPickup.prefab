@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 7880844467109308670}
   - component: {fileID: 751496165524542347}
   - component: {fileID: 8249161222800494084}
+  - component: {fileID: 5366060546197625847}
   m_Layer: 0
   m_Name: CoconutPickup
   m_TagString: Untagged
@@ -140,3 +141,15 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &5366060546197625847
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3907034381106976745}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d1eb043e538f38429d868841dca0d9c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CoconutPickup

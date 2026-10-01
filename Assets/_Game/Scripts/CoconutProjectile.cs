@@ -6,6 +6,9 @@ public class CoconutProjectile : MonoBehaviour
     [SerializeField, Min(1f)] private float maxDistance = 30f;
     [SerializeField, Min(0.01f)] private float radius = 0.25f;
     [SerializeField] private LayerMask obstacleMask;
+    [Header("Smash Audio")]
+    [SerializeField] private AudioClip smashBoxSound;
+    [SerializeField, Range(0f, 1f)] private float smashVolume = 1f;
 
     private PlayerHealth owner;
     private float travelled;
@@ -71,7 +74,8 @@ public class CoconutProjectile : MonoBehaviour
 
         if (obstacle != null)
         {
-            obstacle.TryBreak();
+            if (obstacle.TryBreak() && smashBoxSound != null)
+                AudioSource.PlayClipAtPoint(smashBoxSound, obstacle.transform.position, smashVolume);
         }
 
         Destroy(gameObject);

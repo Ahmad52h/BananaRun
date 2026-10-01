@@ -13,6 +13,7 @@ public class BananaPickup : MonoBehaviour
     [Header("Audio")]
     [Tooltip("Optional per-pickup override; otherwise uses RunnerAudio's banana clip.")]
     [SerializeField] private AudioClip collectSound;
+    [SerializeField, Min(1f)] private float magnetPullSpeed = 19f;
 
     private Renderer[] visualRenderers;
     private bool collected;
@@ -37,6 +38,13 @@ public class BananaPickup : MonoBehaviour
 
     private void Update()
     {
+        PowerUpManager powers = PowerUpManager.ActivePlayer;
+        if (!collected && powers != null && powers.IsActive(PowerUpType.Magnet))
+        {
+            Vector3 target = powers.transform.position + Vector3.up * 0.9f;
+            if ((target - transform.position).sqrMagnitude <= powers.MagnetRadius * powers.MagnetRadius)
+                transform.position = Vector3.MoveTowards(transform.position, target, magnetPullSpeed * Time.deltaTime);
+        }
         if (visual != null)
         {
             visual.Rotate(

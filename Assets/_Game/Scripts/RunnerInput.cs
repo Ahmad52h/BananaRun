@@ -16,6 +16,7 @@ public class RunnerInput : MonoBehaviour
     private InputAction left;
     private InputAction right;
     private InputAction jump;
+    private InputAction slide;
     private InputAction pointerPress;
     private InputAction pointerPosition;
 
@@ -41,6 +42,10 @@ public class RunnerInput : MonoBehaviour
         jump = controls.AddAction("Jump", InputActionType.Button);
         jump.AddBinding("<Keyboard>/space");
         jump.AddBinding("<Keyboard>/upArrow");
+
+        slide = controls.AddAction("Slide", InputActionType.Button);
+        slide.AddBinding("<Keyboard>/s");
+        slide.AddBinding("<Keyboard>/downArrow");
 
         pointerPress = controls.AddAction(
             "PointerPress",
@@ -82,6 +87,9 @@ public class RunnerInput : MonoBehaviour
         if (jump.WasPressedThisFrame())
             motor.Jump();
 
+        if (slide.WasPressedThisFrame())
+            motor.Slide();
+
         ReadSwipe();
     }
 
@@ -114,6 +122,10 @@ public class RunnerInput : MonoBehaviour
             else if (swipe.y > 0f)
             {
                 motor.Jump();
+            }
+            else
+            {
+                motor.Slide();
             }
         }
 

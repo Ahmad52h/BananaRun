@@ -13,6 +13,19 @@ using Object = UnityEngine.Object;
 
 public static partial class TropicalArtSetup
 {
+    [MenuItem("Tools/Banana Run/Apply Reference Mountain Backdrop")]
+    public static void ApplyReferenceBackdrop()
+    {
+        var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        if (EditorApplication.isPlaying || scene.path != "Assets/_Game/Scenes/Level01.unity")
+            throw new InvalidOperationException("Open Level01 in edit mode.");
+        Lighting();
+        Mountains();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        AssetDatabase.SaveAssets();
+    }
+
     [MenuItem("Tools/Banana Run/Apply Tropical Art Direction")]
     public static void Apply()
     {
@@ -78,9 +91,9 @@ public static partial class TropicalArtSetup
         RenderSettings.ambientIntensity = 1;
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
-        RenderSettings.fogColor = new Color(0.57f, 0.76f, 0.69f);
-        RenderSettings.fogStartDistance = 95;
-        RenderSettings.fogEndDistance = 320;
+        RenderSettings.fogColor = new Color(0.67f, 0.82f, 0.87f);
+        RenderSettings.fogStartDistance = 65;
+        RenderSettings.fogEndDistance = 285;
         var volume = Object.FindObjectsByType<Volume>(FindObjectsSortMode.None).FirstOrDefault(v => v.isGlobal);
         if (volume == null) volume = new GameObject("Global Volume").AddComponent<Volume>();
         volume.gameObject.layer = 0;
@@ -122,8 +135,18 @@ public static partial class TropicalArtSetup
         material.SetColor("_GrassColor", new Color(0.31f, 0.45f, 0.18f));
         material.SetFloat("_HalfWidth", 4.6f); material.SetFloat("_EdgeBlend", 1.45f);
         var root = Fresh("Organic Dirt Trail");
-        var v = new List<Vector3> { new Vector3(-70, -0.295f, -60), new Vector3(-70, -0.295f, 945), new Vector3(70, -0.295f, 945), new Vector3(70, -0.295f, -60) };
-        MeshObject("Blended Dirt and Grass", root.transform, SaveMesh("OrganicTrailSurface", v, new List<int> { 0, 1, 2, 0, 2, 3 }), material);
+        var v = new List<Vector3>();
+        var triangles = new List<int>();
+        foreach (var segment in new[] { new Vector2(-60, 610), new Vector2(642, 945) })
+        {
+            int n = v.Count;
+            v.Add(new Vector3(-70, -0.295f, segment.x));
+            v.Add(new Vector3(-70, -0.295f, segment.y));
+            v.Add(new Vector3(70, -0.295f, segment.y));
+            v.Add(new Vector3(70, -0.295f, segment.x));
+            triangles.AddRange(new[] { n, n + 1, n + 2, n, n + 2, n + 3 });
+        }
+        MeshObject("Blended Dirt and Grass", root.transform, SaveMesh("OrganicTrailSurface", v, triangles), material);
         root.GetComponentInChildren<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
         GameObject.Find("Ground").GetComponent<Renderer>().enabled = false;
         foreach (string bank in new[] { "Extended Left Bank", "Extended Right Bank" })
@@ -163,27 +186,40 @@ public static partial class TropicalArtSetup
     static void Mountains()
     {
         var root = Fresh("Distant Jungle Silhouettes");
-        var material = Mat("DistantJungle", "#527F6C");
+        var nearMaterial = Mat("DistantJungle", "#749BA1");
+        var farMaterial = Mat("FarJungle", "#91AFB7");
+        // Shared vertices and several curved rings give smooth hills instead of pyramids.
         var v = new List<Vector3>(); var t = new List<int>();
-        // Flat-shaded tapered peaks, kept entirely outside the playable corridor.
-        for (int side = 0; side < 8; side++)
+        const int sectors = 24;
+        const int rings = 6;
+        for (int ring = 0; ring <= rings; ring++)
         {
-            float a = side * Mathf.PI / 4, b = (side + 1) * Mathf.PI / 4;
-            int n = v.Count;
-            v.Add(new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)));
-            v.Add(new Vector3(0.15f, 1, 0.1f));
-            v.Add(new Vector3(Mathf.Cos(b), 0, Mathf.Sin(b)));
-            t.AddRange(new[] { n, n + 1, n + 2 });
+            float radius = 1f - ring / (float)rings;
+            float height = Mathf.Pow(1f - radius * radius, 1.15f);
+            for (int sector = 0; sector <= sectors; sector++)
+            {
+                float angle = sector * Mathf.PI * 2f / sectors;
+                v.Add(new Vector3(Mathf.Cos(angle) * radius, height, Mathf.Sin(angle) * radius));
+                if (ring == 0 || sector == 0) continue;
+                int current = ring * (sectors + 1) + sector;
+                int previous = current - (sectors + 1);
+                t.AddRange(new[] { previous - 1, current - 1, previous, previous, current - 1, current });
+            }
         }
-        var mesh = SaveMesh("JunglePeak", v, t);
+        var mesh = SaveMesh("JungleHill", v, t);
         for (int i = 0; i < 10; i++) for (int side = -1; side <= 1; side += 2)
         {
-            var mountain = new GameObject("Jungle Ridge"); mountain.transform.SetParent(root.transform);
-            MeshObject("Peak", mountain.transform, mesh, material);
-            mountain.transform.position = new Vector3(side * (62 + i % 3 * 8), -3, 75 + i * 95);
-            mountain.transform.localScale = new Vector3(32 + i % 3 * 6, 30 + i % 4 * 9, 52);
-            mountain.transform.localEulerAngles = new Vector3(0, i * 37, 0);
-            mountain.GetComponentInChildren<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            for (int layer = 0; layer < 2; layer++)
+            {
+                var hill = new GameObject(layer == 0 ? "Blue Distance Hill" : "Tropical Foreground Hill");
+                hill.transform.SetParent(root.transform);
+                MeshObject("Smooth Rolling Silhouette", hill.transform, mesh, layer == 0 ? farMaterial : nearMaterial);
+                hill.transform.position = new Vector3(side * (layer == 0 ? 145 : 97), -5, 58 + i * 93 + layer * 34);
+                hill.transform.localScale = layer == 0
+                    ? new Vector3(78 + i % 3 * 8, 37 + i % 4 * 5, 72)
+                    : new Vector3(52 + i % 3 * 6, 19 + i % 4 * 4, 60);
+                hill.GetComponentInChildren<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            }
         }
     }
 
