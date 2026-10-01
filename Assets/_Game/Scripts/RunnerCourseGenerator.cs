@@ -19,6 +19,8 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private GameObject coconutPrefab;
     [SerializeField] private PowerUpPickup[] powerUpPrefabs;
     [SerializeField] private FallingCoconutHazard fallingCoconutPrefab;
+    [SerializeField] private BananaPeelHazard bananaPeelPrefab;
+    public int SpawnedPeelCount { get; private set; }
     [SerializeField] private float gapStart = 610f;
     [SerializeField] private float gapEnd = 642f;
     [SerializeField, Min(8f)] private float minimumSpacing = 12f;
@@ -53,6 +55,19 @@ public class RunnerCourseGenerator : MonoBehaviour
             int pattern = row % 4;
             int firstLane = safeLane == -1 ? 0 : -1;
             int secondLane = safeLane == 1 ? 0 : 1;
+            // Put peels before occasional rows, outside the clear lane. The lock
+            // expires before reaching the obstacle even at the configured run speed.
+            if (bananaPeelPrefab != null && row % 4 == 2)
+            {
+                float lead = Mathf.Max(8f, player.ForwardSpeed * 0.8f + 2f);
+                float peelZ = z - lead;
+                if (peelZ > gapEnd + 3f || peelZ < gapStart - 3f)
+                {
+                    Instantiate(bananaPeelPrefab, new Vector3(centerX + firstLane * laneWidth,
+                        groundHeight, peelZ), Quaternion.identity, transform);
+                    SpawnedPeelCount++;
+                }
+            }
             SpawnObstacle(random, centerX + firstLane * laneWidth, z, row);
             if (pattern == 1 || pattern == 3)
                 SpawnObstacle(random, centerX + secondLane * laneWidth, z + (pattern == 3 ? 2.5f : 0), row + 2);

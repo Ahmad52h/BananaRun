@@ -155,6 +155,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerObstacle
   breakable: 0
+  breakEffectPrefab: {fileID: 0}
+  bananaPrefab: {fileID: 0}
+  coconutPrefab: {fileID: 0}
+  bananaSpawnPoint: {fileID: 0}
+  bananaLandingPoint: {fileID: 0}
 --- !u!1001 &5077013789389988168
 PrefabInstance:
   m_ObjectHideFlags: 0

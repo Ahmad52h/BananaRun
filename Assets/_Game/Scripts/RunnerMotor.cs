@@ -11,11 +11,16 @@ public class RunnerMotor : MonoBehaviour
     [SerializeField, Min(0.1f)] private float laneChangeSpeed = 12f;
 
     [Header("Jump")]
-    [SerializeField, Min(0.1f)] private float jumpHeight = 2f;
-    [SerializeField] private float gravity = -25f;
+    [SerializeField, Min(0.1f)] private float jumpHeight = 2.3f;
+    [SerializeField] private float gravity = -21f;
+
     [Header("Slide")]
-    [SerializeField, Min(0.1f)] private float slideDuration = 0.75f;
-    [SerializeField, Min(0.5f)] private float slideHeight = 0.8f;
+    [Tooltip("مدة الزحلقة بالثواني - زدناها ليعبر العائق كاملاً دون أن يقف تحته")]
+    [SerializeField, Min(0.1f)] private float slideDuration = 0.95f;
+    [Tooltip("ارتفاع الكوليدر أثناء الزحلقة")]
+    [SerializeField, Min(0.2f)] private float slideHeight = 0.55f;
+    [Tooltip("تصغير نصف القطر أثناء الزحلقة ليسمح يونيتي بانخفاض الكوليدر للأسفل تماماً")]
+    [SerializeField, Min(0.1f)] private float slideRadius = 0.25f;
 
     private CharacterController controller;
     private int currentLane;
@@ -25,14 +30,30 @@ public class RunnerMotor : MonoBehaviour
     private float slowdownDuration;
     private float slowdownMultiplier = 1f;
     private PowerUpManager powerUps;
+    
+    // حفظ الأبعاد الأصلية للكوليدر
     private float standingHeight;
     private Vector3 standingCenter;
+    private float standingRadius;
+
     private float slideEndsAt;
     private bool sliding;
+    private float laneLockEndsAt;
+
+    public float SlideDuration => slideDuration;
+    public bool IsLaneLocked => Time.time < laneLockEndsAt;
+
+    public void LockLaneSwitching(float duration)
+    {
+        laneLockEndsAt = Mathf.Max(laneLockEndsAt, Time.time + Mathf.Max(0f, duration));
+        // Discard an in-progress lane request; hold the actual horizontal position.
+        currentLane = Mathf.Clamp(Mathf.RoundToInt((transform.position.x - centerX) / laneDistance), -1, 1);
+    }
 
     public float LaneDistance => laneDistance;
     public float ForwardSpeed => forwardSpeed;
     public float BaseGravity => gravity;
+    public float JumpDuration => 2f * Mathf.Sqrt(jumpHeight * -2f * gravity) / -gravity;
     public bool IsSliding => sliding;
     public float EffectiveGravity => gravity * (powerUps != null && powerUps.IsActive(PowerUpType.Glider) &&
         controller != null && !controller.isGrounded ? 0.35f : 1f);
@@ -51,8 +72,10 @@ public class RunnerMotor : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         powerUps = GetComponent<PowerUpManager>();
+        
         standingHeight = controller.height;
         standingCenter = controller.center;
+        standingRadius = controller.radius;
 
         // The starting position defines the center lane.
         centerX = transform.position.x;
@@ -82,6 +105,7 @@ public class RunnerMotor : MonoBehaviour
             targetX,
             laneChangeSpeed * deltaTime
         );
+        if (IsLaneLocked) nextX = transform.position.x;
 
         Vector3 movement = new Vector3(
             nextX - transform.position.x,
@@ -100,6 +124,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void ChangeLane(int direction)
     {
+        if (!isActiveAndEnabled || IsLaneLocked) return;
         currentLane = Mathf.Clamp(
             currentLane + direction,
             -1,
@@ -119,14 +144,25 @@ public class RunnerMotor : MonoBehaviour
 
     public bool Slide()
     {
-        if (!isActiveAndEnabled || sliding || !controller.enabled || !controller.isGrounded)
+        if (!isActiveAndEnabled || sliding || IsLaneLocked || !controller.enabled)
             return false;
+
+        // إذا كان القرد في الهواء وضغطت زحلقة، ينزل بسرعة للأرض ويتزحلق
+        if (!controller.isGrounded)
+        {
+            verticalVelocity = -20f;
+        }
+
         sliding = true;
         slideEndsAt = Time.time + slideDuration;
-        float height = Mathf.Max(controller.radius * 2f, Mathf.Min(slideHeight, standingHeight));
+
+        // تصغير القطر والارتفاع معاً للنزول تحت العائق بنعومة
+        controller.radius = slideRadius;
+        controller.height = slideHeight;
+        
         float bottom = standingCenter.y - standingHeight * 0.5f;
-        controller.height = height;
-        controller.center = new Vector3(standingCenter.x, bottom + height * 0.5f, standingCenter.z);
+        controller.center = new Vector3(standingCenter.x, bottom + slideHeight * 0.5f, standingCenter.z);
+        
         return true;
     }
 
@@ -135,6 +171,7 @@ public class RunnerMotor : MonoBehaviour
         sliding = false;
         controller.height = standingHeight;
         controller.center = standingCenter;
+        controller.radius = standingRadius;
     }
 
     private void OnDisable()
@@ -147,6 +184,5 @@ public class RunnerMotor : MonoBehaviour
     private void OnValidate()
     {
         gravity = Mathf.Min(gravity, -0.1f);
-        slideHeight = Mathf.Min(slideHeight, GetComponent<CharacterController>()?.height ?? 2f);
     }
 }

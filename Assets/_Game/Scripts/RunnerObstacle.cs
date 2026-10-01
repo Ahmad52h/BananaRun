@@ -4,6 +4,10 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
 public class RunnerObstacle : MonoBehaviour
 {
+    [Header("Obstacle Type")]
+    [Tooltip("تحديد هل هذا العائق مخصص للتزحلق من تحته")]
+    [SerializeField] private bool canSlideUnder;
+
     [SerializeField] private bool breakable;
     [Header("Break Rewards")]
     [SerializeField] private CrateBreakEffect breakEffectPrefab;
@@ -22,6 +26,13 @@ public class RunnerObstacle : MonoBehaviour
         Rigidbody body = GetComponent<Rigidbody>();
         body.useGravity = false;
         body.isKinematic = true;
+
+        // يتعرف تلقائياً إذا كان هذا العائق لوحاً مرتفعاً للتزحلق (مثل HighSlideBeam)
+        string objName = gameObject.name.ToLower();
+        if (objName.Contains("slide") || objName.Contains("beam") || objName.Contains("high"))
+        {
+            canSlideUnder = true;
+        }
     }
 
     private void OnEnable()
@@ -36,12 +47,11 @@ public class RunnerObstacle : MonoBehaviour
         if (touched || broken)
             return;
 
-        PlayerHealth health =
-            other.GetComponentInParent<PlayerHealth>();
-
+        PlayerHealth health = other.GetComponentInParent<PlayerHealth>();
         if (health == null || health.IsRunOver)
             return;
 
+        // 1. فحص القدرة الخارقة (Bulldozer)
         var powers = health.GetComponent<PowerUpManager>();
         if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
         {
@@ -50,6 +60,35 @@ public class RunnerObstacle : MonoBehaviour
             return;
         }
 
+        // 2. الحماية أثناء الزحلقة: إذا كان القرد يتزحلق والعائق مرتفع، يتجاهل الضرر ويمر بسلام!
+        RunnerMotor motor = other.GetComponentInParent<RunnerMotor>();
+        if (canSlideUnder && motor != null && motor.IsSliding)
+        {
+            return; // عبور آمن 100% بدون أي ضرر!
+        }
+
+        // إذا كان القرد واقفاً ولم يتزحلق، يتأذى
+        touched = true;
+        health.TakeHit();
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        if (touched || broken)
+            return;
+
+        PlayerHealth health = other.GetComponentInParent<PlayerHealth>();
+        if (health == null || health.IsRunOver)
+            return;
+
+        // حماية مستمرة طالما القرد تحت العائق ويتزحلق
+        RunnerMotor motor = other.GetComponentInParent<RunnerMotor>();
+        if (canSlideUnder && motor != null && motor.IsSliding)
+        {
+            return;
+        }
+
+        // إذا وقف في منتصف العائق قبل أن يعبره تماماً، يتأذى
         touched = true;
         health.TakeHit();
     }
@@ -112,7 +151,6 @@ public class RunnerObstacle : MonoBehaviour
 
         if (coconutPrefab != null)
         {
-            // Drop it beyond the crate, in the same lane and at pickup height.
             Vector3 rewardPosition = new Vector3(bounds.center.x, bounds.min.y + 0.8f, bounds.max.z + 2.4f);
             Instantiate(coconutPrefab, rewardPosition, Quaternion.identity);
         }
