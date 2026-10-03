@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: bdcdf97e5d3a143cbbe8bd32e12f79dd
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 402804
+  packageName: Maeko Flock - Starling Bird Murmuration
+  packageVersion: 1.0
+  assetPath: Assets/MaekoFlock/Starling/StarlingAnimator.controller
+  uploadId: 981916

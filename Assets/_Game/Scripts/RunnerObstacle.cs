@@ -21,11 +21,12 @@ public class RunnerObstacle : MonoBehaviour
 
     private void Awake()
     {
-        GetComponent<BoxCollider>().isTrigger = true;
+        var hitbox = GetComponent<BoxCollider>();
+        if (hitbox == null) { enabled = false; return; }
+        hitbox.isTrigger = true;
 
         Rigidbody body = GetComponent<Rigidbody>();
-        body.useGravity = false;
-        body.isKinematic = true;
+        if (body != null) { body.useGravity = false; body.isKinematic = true; }
 
         // يتعرف تلقائياً إذا كان هذا العائق لوحاً مرتفعاً للتزحلق (مثل HighSlideBeam)
         string objName = gameObject.name.ToLower();
@@ -39,12 +40,13 @@ public class RunnerObstacle : MonoBehaviour
     {
         touched = false;
         broken = false;
-        GetComponent<BoxCollider>().enabled = true;
+        var hitbox = GetComponent<BoxCollider>();
+        if (hitbox != null) hitbox.enabled = true;
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (touched || broken)
+        if (broken)
             return;
 
         PlayerHealth health = other.GetComponentInParent<PlayerHealth>();
@@ -61,6 +63,7 @@ public class RunnerObstacle : MonoBehaviour
         }
 
         // 2. الحماية أثناء الزحلقة: إذا كان القرد يتزحلق والعائق مرتفع، يتجاهل الضرر ويمر بسلام!
+        if (touched) return;
         RunnerMotor motor = other.GetComponentInParent<RunnerMotor>();
         if (canSlideUnder && motor != null && motor.IsSliding)
         {
@@ -72,26 +75,7 @@ public class RunnerObstacle : MonoBehaviour
         health.TakeHit();
     }
 
-    private void OnTriggerStay(Collider other)
-    {
-        if (touched || broken)
-            return;
-
-        PlayerHealth health = other.GetComponentInParent<PlayerHealth>();
-        if (health == null || health.IsRunOver)
-            return;
-
-        // حماية مستمرة طالما القرد تحت العائق ويتزحلق
-        RunnerMotor motor = other.GetComponentInParent<RunnerMotor>();
-        if (canSlideUnder && motor != null && motor.IsSliding)
-        {
-            return;
-        }
-
-        // إذا وقف في منتصف العائق قبل أن يعبره تماماً، يتأذى
-        touched = true;
-        health.TakeHit();
-    }
+    private void OnTriggerStay(Collider other) => OnTriggerEnter(other);
 
     public bool TryBreak()
     {
@@ -106,9 +90,14 @@ public class RunnerObstacle : MonoBehaviour
     {
         if (broken) return;
 
+        BoxCollider hitbox = GetComponent<BoxCollider>();
+        if (hitbox == null) { gameObject.SetActive(false); return; }
         broken = true;
 
-        BoxCollider hitbox = GetComponent<BoxCollider>();
+        var powers = PowerUpManager.ActivePlayer;
+        if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
+            powers.PlayCrushEffect(hitbox.bounds.center);
+
         Bounds bounds = hitbox.bounds;
 
         // Stop collisions immediately.

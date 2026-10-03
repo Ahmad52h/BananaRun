@@ -43,6 +43,40 @@ public class RunnerAnimation : MonoBehaviour
     private int currentState;
     private bool frozen;
     private bool wasGrounded;
+    public bool IsVineControlled { get; private set; }
+    private bool vineReleased;
+    private static readonly int VineState = Animator.StringToHash("Base Layer.VineSwing");
+
+    public void BeginVineSwing()
+    {
+        IsVineControlled = true;
+        vineReleased = false;
+        hitEndsAt = 0f;
+        StopThrowOverlay();
+        animator.ResetTrigger(hitTriggerHash);
+        animator.SetBool("Sliding", false);
+        animator.SetBool("VineAttached", true);
+        animator.speed = 1f;
+        jumpCenterWeight = 0f;
+        ChangeState(VineState, 0.16f);
+    }
+
+    public void ReleaseVine(float flightDuration)
+    {
+        vineReleased = true;
+        animator.SetBool("VineAttached", false);
+        animator.SetFloat("JumpSpeed", jumpClipLength / Mathf.Max(0.1f, flightDuration));
+        ChangeState(JumpState, 0.12f);
+    }
+
+    public void EndVineSwing()
+    {
+        IsVineControlled = false;
+        vineReleased = false;
+        animator.SetBool("VineAttached", false);
+        wasGrounded = false;
+        if (!health.IsRunOver) ChangeState(RunState, landBlendDuration);
+    }
     private Transform hips;
     private Transform leftFoot;
     private Transform rightFoot;
@@ -82,7 +116,7 @@ public class RunnerAnimation : MonoBehaviour
             hips = animator.GetBoneTransform(HumanBodyBones.Hips);
             leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
             rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-            centeredHipsZ = hips.localPosition.z;
+            if (hips != null) centeredHipsZ = hips.localPosition.z;
         }
         RefreshHitTrigger();
 
@@ -101,7 +135,7 @@ public class RunnerAnimation : MonoBehaviour
 
     public void TriggerThrow(float duration = 0.55f)
     {
-        if (IsReactingToHit || (motor != null && motor.IsSliding)) return;
+        if (IsVineControlled || IsReactingToHit || (motor != null && motor.IsSliding)) return;
         if (throwLayerIndex == -1)
             throwLayerIndex = animator.GetLayerIndex("Throw Overlay");
 
@@ -162,6 +196,7 @@ public class RunnerAnimation : MonoBehaviour
 
     private void Start()
     {
+        if (animator == null || health == null || motor == null || controller == null) { enabled = false; return; }
         if (!animator.HasState(0, RunState) ||
             !animator.HasState(0, JumpState) ||
             !animator.HasState(0, IdleState))
@@ -178,6 +213,7 @@ public class RunnerAnimation : MonoBehaviour
 
     private void Update()
     {
+        if (animator == null || health == null || motor == null || controller == null) return;
         if (frozen) return;
         if (health.IsDead)
         {
@@ -191,6 +227,7 @@ public class RunnerAnimation : MonoBehaviour
             ChangeState(IdleState, blendDuration);
             return;
         }
+        if (IsVineControlled) return;
         if (IsReactingToHit) return;
 
         bool grounded = controller.isGrounded;
@@ -220,7 +257,7 @@ public class RunnerAnimation : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (hips == null || frozen || !animator.isActiveAndEnabled) return;
+        if (hips == null || frozen || !animator.isActiveAndEnabled || (IsVineControlled && !vineReleased)) return;
         // Apply after Animator evaluation. Keep the flip on the runner's axis and
         // retain this correction through the landing blend to avoid a one-frame snap.
         bool airborneFlip = !controller.isGrounded && currentState == JumpState;
@@ -283,6 +320,7 @@ public class RunnerAnimation : MonoBehaviour
 
     private void BeginStumble(float duration)
     {
+        if (IsVineControlled) return;
         RefreshHitTrigger();
         if (animator == null || !animator.isActiveAndEnabled || !hasHitTrigger) return;
         StopThrowOverlay();

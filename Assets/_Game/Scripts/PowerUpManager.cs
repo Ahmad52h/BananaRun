@@ -26,6 +26,13 @@ public class PowerUpManager : MonoBehaviour
     [SerializeField] private Sprite bulldozerIcon;
     [SerializeField] private Sprite gliderIcon;
     [SerializeField] private Sprite magnetIcon;
+    [Header("Giant Impact")]
+    [SerializeField] private GiantImpactEffect giantImpactPrefab;
+
+    public void PlayCrushEffect(Vector3 position)
+    {
+        if (giantImpactPrefab != null) Instantiate(giantImpactPrefab, position, Quaternion.identity);
+    }
 
     private readonly float[] endsAt = new float[3];
     private Vector3 originalModelScale;

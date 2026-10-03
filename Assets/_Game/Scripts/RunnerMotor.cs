@@ -84,6 +84,7 @@ public class RunnerMotor : MonoBehaviour
 
     private void Update()
     {
+        if (controller == null || !controller.enabled) return;
         float deltaTime = Time.deltaTime;
 
         if (deltaTime <= 0f)
@@ -134,7 +135,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (sliding || !controller.isGrounded)
+        if (!isActiveAndEnabled || controller == null || !controller.enabled || sliding || !controller.isGrounded)
             return;
 
         verticalVelocity = Mathf.Sqrt(

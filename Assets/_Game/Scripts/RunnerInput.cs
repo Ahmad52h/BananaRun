@@ -62,18 +62,18 @@ public class RunnerInput : MonoBehaviour
 
     private void OnEnable()
     {
-        controls.Enable();
+        controls?.Enable();
     }
 
     private void OnDisable()
     {
-        controls.Disable();
+        controls?.Disable();
         trackingSwipe = false;
     }
 
     private void OnDestroy()
     {
-        controls.Dispose();
+        controls?.Dispose();
     }
 
     private void Update()

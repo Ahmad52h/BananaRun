@@ -34,6 +34,7 @@ public class FinishGate : MonoBehaviour
 
     private void Awake()
     {
+        if (hud == null) hud = FindAnyObjectByType<RunnerHUD>();
         GetComponent<BoxCollider>().isTrigger = true;
 
         Rigidbody body = GetComponent<Rigidbody>();
@@ -55,20 +56,14 @@ public class FinishGate : MonoBehaviour
         BananaInventory inventory =
             health.GetComponent<BananaInventory>();
 
-        if (inventory == null || hud == null)
-        {
-            Debug.LogError(
-                "FinishGate: Check HUD and BananaInventory.", this);
-            return;
-        }
-
         completed = true;
 
-        int finalCount = inventory.Count;
-        bool won = finalCount >= requiredBananas;
+        int finalCount = inventory != null ? inventory.Count : 0;
+        bool won = true;
 
         health.EndRun();
-        inventory.enabled = false;
+        if (inventory != null) inventory.enabled = false;
+        if (hud != null) hud.ShowFinishResult(true, finalCount, requiredBananas);
 
         StartCoroutine(
             FinishSequence(health.transform, finalCount, won));
@@ -83,16 +78,10 @@ public class FinishGate : MonoBehaviour
         {
             yield return DeliverBananas(player, finalCount);
         }
-        else if (finalCount > 0)
-        {
-            Debug.LogWarning(
-                "FinishGate: Assign delivery visual and banana target.",
-                this);
-        }
 
         yield return new WaitForSecondsRealtime(0.3f);
 
-        hud.ShowFinishResult(
+        if (hud != null) hud.ShowFinishResult(
             won, finalCount, requiredBananas);
     }
 

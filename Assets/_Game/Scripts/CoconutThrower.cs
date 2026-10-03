@@ -33,7 +33,7 @@ public class CoconutThrower : MonoBehaviour
 
     public bool TryCollect()
     {
-        if (health.IsRunOver || currentCoconuts >= maxCoconuts)
+        if (health == null || health.IsRunOver || currentCoconuts >= maxCoconuts)
             return false;
 
         currentCoconuts++;

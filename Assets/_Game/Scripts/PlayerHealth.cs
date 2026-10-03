@@ -63,7 +63,7 @@ public class PlayerHealth : MonoBehaviour
 
         IsRunOver = true;
 
-        motor.enabled = false;
-        runnerInput.enabled = false;
+        if (motor != null) motor.enabled = false;
+        if (runnerInput != null) runnerInput.enabled = false;
     }
 }
