@@ -21,6 +21,7 @@ public class RunnerMotor : MonoBehaviour
     [SerializeField, Min(0.2f)] private float slideHeight = 0.55f;
     [Tooltip("تصغير نصف القطر أثناء الزحلقة ليسمح يونيتي بانخفاض الكوليدر للأسفل تماماً")]
     [SerializeField, Min(0.1f)] private float slideRadius = 0.25f;
+    [SerializeField] private LaneChangeVisual laneChangeVisual;
 
     private CharacterController controller;
     private int currentLane;
@@ -124,14 +125,25 @@ public class RunnerMotor : MonoBehaviour
     }
 
     public void ChangeLane(int direction)
+{
+    if (!isActiveAndEnabled || IsLaneLocked)
+        return;
+
+    int oldLane = currentLane;
+
+    currentLane = Mathf.Clamp(
+        currentLane + direction,
+        -1,
+        1
+    );
+
+    // فقط شغّل الحركة إذا اللاعب فعلاً انتقل إلى Lane جديد
+    if (currentLane != oldLane && laneChangeVisual != null)
     {
-        if (!isActiveAndEnabled || IsLaneLocked) return;
-        currentLane = Mathf.Clamp(
-            currentLane + direction,
-            -1,
-            1
-        );
+        int actualDirection = currentLane > oldLane ? 1 : -1;
+        laneChangeVisual.PlayLaneChange(actualDirection);
     }
+}
 
     public void Jump()
     {
