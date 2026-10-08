@@ -218,9 +218,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dff6f33781008904d8bd3d9978eafaac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerObstacle
+  canSlideUnder: 0
   breakable: 1
+  breakOnPlayerHit: 1
+  playerHitImpactPrefab: {fileID: 6899849964963383488, guid: 0cce3f50d6655e845885e13dc20dd538, type: 3}
+  obstacleRoot: {fileID: 8265474152160706510}
   breakEffectPrefab: {fileID: 5883521615074686731, guid: a4402114f7241734db5f41910539af19, type: 3}
   bananaPrefab: {fileID: 695452153143438817, guid: 78ed7ffb130f8444d814ef15623a4d2c, type: 3}
+  coconutPrefab: {fileID: 0}
   bananaSpawnPoint: {fileID: 5588827508369311624}
   bananaLandingPoint: {fileID: 780465206811825771}
 --- !u!1001 &6238192297822881294

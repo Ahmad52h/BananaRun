@@ -185,7 +185,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dff6f33781008904d8bd3d9978eafaac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerObstacle
+  canSlideUnder: 0
   breakable: 0
+  breakOnPlayerHit: 1
+  playerHitImpactPrefab: {fileID: 6899849964963383488, guid: 0cce3f50d6655e845885e13dc20dd538, type: 3}
+  obstacleRoot: {fileID: 2268352473792992530}
   breakEffectPrefab: {fileID: 5883521615074686731, guid: a4402114f7241734db5f41910539af19, type: 3}
   bananaPrefab: {fileID: 0}
   coconutPrefab: {fileID: 0}
@@ -323,7 +327,7 @@ LODGroup:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3123180610093402013}
-  serializedVersion: 2
+  serializedVersion: 3
   m_LocalReferencePoint: {x: -0.005520433, y: 0.12129615, z: 0.002885133}
   m_Size: 0.25192297
   m_FadeMode: 0
@@ -343,6 +347,7 @@ LODGroup:
     renderers:
     - renderer: {fileID: 9116675776762828256}
   m_Enabled: 1
+  m_GlobalIlluminationLOD: 0
 --- !u!1 &3785581053725031803
 GameObject:
   m_ObjectHideFlags: 0

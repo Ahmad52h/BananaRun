@@ -18,6 +18,11 @@ public class RunnerHUD : MonoBehaviour
     [Header("Tropical Results")]
     [SerializeField] private Sprite roundedPanelSprite;
     [SerializeField] private Sprite bananaResultIcon;
+    [Header("Coconut Inventory")]
+    [SerializeField] private TMP_Text coconutCountText;
+    [SerializeField] private RectTransform coconutBadge;
+    private int displayedCoconuts;
+    private Coroutine coconutPop;
     private BananaInventory inventory;
     private PowerUpManager powers;
     private UnityEngine.UI.Button retryButton;
@@ -155,6 +160,12 @@ public class RunnerHUD : MonoBehaviour
 
     private void OnEnable()
     {
+        if (coconutThrower != null)
+        {
+            displayedCoconuts = coconutThrower.CurrentCoconuts;
+            UpdateCoconuts(displayedCoconuts);
+            coconutThrower.CountChanged += UpdateCoconuts;
+        }
         if (health == null) return;
         health.HeartsChanged += UpdateHearts;
         health.Died += ShowGameOver;
@@ -173,6 +184,10 @@ public class RunnerHUD : MonoBehaviour
     }
     private void OnDisable()
     {
+        if (coconutThrower != null) coconutThrower.CountChanged -= UpdateCoconuts;
+        if (coconutPop != null) StopCoroutine(coconutPop);
+        coconutPop = null;
+        if (coconutBadge != null) coconutBadge.localScale = Vector3.one;
         if (health == null) return;
         health.HeartsChanged -= UpdateHearts;
         health.Died -= ShowGameOver;
@@ -182,6 +197,27 @@ public class RunnerHUD : MonoBehaviour
         if (heartsText != null && health != null) heartsText.text = $"Hearts: {hearts}/{health.MaxHearts}";
         if (heartIcons != null) for (int i = 0; i < heartIcons.Length; i++)
             if (heartIcons[i] != null) heartIcons[i].color = i < hearts ? fullHeartColor : emptyHeartColor;
+    }
+    private void UpdateCoconuts(int count)
+    {
+        if (coconutCountText != null) coconutCountText.text = "x" + count;
+        if (count > displayedCoconuts && coconutBadge != null)
+        {
+            if (coconutPop != null) StopCoroutine(coconutPop);
+            coconutPop = StartCoroutine(PopCoconutCount());
+        }
+        displayedCoconuts = count;
+    }
+    private IEnumerator PopCoconutCount()
+    {
+        for (float elapsed = 0; elapsed < 0.32f; elapsed += Time.unscaledDeltaTime)
+        {
+            float t = elapsed / 0.32f;
+            coconutBadge.localScale = Vector3.one * (1f + 0.16f * Mathf.Sin(t * Mathf.PI) * (1f - 0.35f * t));
+            yield return null;
+        }
+        coconutBadge.localScale = Vector3.one;
+        coconutPop = null;
     }
     private void ShowGameOver() => ShowResult(false, inventory != null ? inventory.Count : 0);
     public void ShowFinishResult(bool won, int collected, int required) => ShowResult(health != null && !health.IsDead, collected);

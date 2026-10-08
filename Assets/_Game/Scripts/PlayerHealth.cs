@@ -42,6 +42,7 @@ public class PlayerHealth : MonoBehaviour
 
         Hearts--;
         protectionEndsAt = Time.time + protectionDuration;
+        RunnerAudio.Instance?.PlayHurt();
         HitTaken?.Invoke();
 
         if (IsDead)

@@ -1,9 +1,8 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Builds the extended course once per run with reproducible, lane-safe patterns.
-/// </summary>
+/// <summary>Builds a runner-owned course with distance-based difficulty and swept-volume safe lanes.</summary>
 [DefaultExecutionOrder(-50)]
 public class RunnerCourseGenerator : MonoBehaviour
 {
@@ -15,7 +14,6 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private float groundHeight = -0.3f;
     [SerializeField] private int seed = 731;
     [SerializeField] private bool randomizeEachRun;
-
     [Header("Patterns")]
     [SerializeField] private GameObject[] obstaclePrefabs;
     [SerializeField] private GameObject bananaPrefab;
@@ -23,581 +21,263 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private PowerUpPickup[] powerUpPrefabs;
     [SerializeField] private FallingCoconutHazard fallingCoconutPrefab;
     [SerializeField] private BananaPeelHazard bananaPeelPrefab;
-
-    public int SpawnedPeelCount { get; private set; }
-
     [SerializeField] private float gapStart = 610f;
     [SerializeField] private float gapEnd = 642f;
     [SerializeField, Min(8f)] private float minimumSpacing = 12f;
     [SerializeField, Min(8f)] private float maximumSpacing = 20f;
-
-    [Header("Difficulty")]
-    [SerializeField, Min(1f)]
-    private float maxHazardSpeedMultiplier = 1.30f;
-
+    [Header("Difficulty (per runner)")]
+    [SerializeField] private LevelProgressHUD progressSource;
+    [SerializeField, Min(0f)] private float difficultyStartDistance = 90f;
+    [Tooltip("Distance from this runner's start. Zero uses its full distance to the finish.")]
+    [SerializeField, Min(0f)] private float maximumDifficultyDistance;
+    [SerializeField, Range(1f, 1.3f)] private float obstacleFrequencyMultiplier = 1.18f;
+    [SerializeField, Range(1f, 1.3f)] private float maxHazardSpeedMultiplier = 1.15f;
+    [SerializeField, Range(0.65f, 1f)] private float powerUpFrequencyMultiplier = 0.85f;
+    [SerializeField, Range(0f, 1f)] private float earlyDynamicChance = 0.10f;
+    [SerializeField, Range(0f, 1f)] private float lateDynamicChance = 0.38f;
+    [SerializeField, Min(0.8f)] private float minimumReactionSeconds = 1.1f;
+    [SerializeField, Min(30f)] private float powerUpSpacing = 120f;
     [Header("Scenery")]
     [SerializeField] private GameObject[] sceneryPrefabs;
     [SerializeField] private GameObject roadsideShrubPrefab;
     [SerializeField, Min(6f)] private float scenerySpacing = 14f;
 
+    public int SpawnedPeelCount { get; private set; }
     public int SpawnedObstacleCount { get; private set; }
     public int PatternCount { get; private set; }
-
-    private float runStartZ;
-
-    // Used by DynamicRunnerHazard
     public RunnerMotor Player => player;
+    public float Progress01 => progressSource != null && player != null ? progressSource.ProgressAt(player.transform.position.z) : 0f;
+    public float Difficulty => player != null ? DifficultyAt(player.transform.position.z) : 0f;
+    public float CurrentHazardSpeedMultiplier => Mathf.Lerp(1f, maxHazardSpeedMultiplier, Difficulty);
+    public float ReactionDistance => player != null ? player.ForwardSpeed * (minimumReactionSeconds + player.LaneChangeDuration) : 0f;
 
-    // Player progress from 0 to 1.
-    public float Progress01
+    public readonly struct Section
     {
-        get
-        {
-            if (player == null || finishLine == null)
-                return 0f;
-
-            float totalDistance =
-                finishLine.position.z - runStartZ;
-
-            if (totalDistance <= 0.01f)
-                return 0f;
-
-            float travelled =
-                player.transform.position.z - runStartZ;
-
-            return Mathf.Clamp01(
-                travelled / totalDistance
-            );
-        }
+        public readonly float Z, Start, End, Difficulty;
+        public readonly int SafeLane;
+        public Section(float z, float start, float end, float difficulty, int lane)
+        { Z = z; Start = start; End = end; Difficulty = difficulty; SafeLane = lane; }
     }
+    private readonly List<Section> sections = new List<Section>();
+    public IReadOnlyList<Section> Sections => sections;
+    private sealed class ObstacleProfile
+    {
+        public GameObject prefab;
+        public Bounds bounds;
+        public float travel;
+        public bool dynamic;
+    }
+    private readonly List<ObstacleProfile> palette = new List<ObstacleProfile>();
+    private float playerRadius;
 
-    // Dynamic hazards gradually get faster as the player progresses.
-    public float CurrentHazardSpeedMultiplier =>
-        Mathf.Lerp(
-            1f,
-            maxHazardSpeedMultiplier,
-            Progress01
-        );
+    public float DifficultyAt(float worldZ)
+    {
+        if (progressSource == null || player == null || progressSource.Player != player.transform) return 0f;
+        float maximum = maximumDifficultyDistance > 0 ? maximumDifficultyDistance : progressSource.RunLength;
+        return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(difficultyStartDistance,
+            Mathf.Max(difficultyStartDistance + 1f, maximum), progressSource.DistanceAt(worldZ)));
+    }
 
     private void Start()
     {
-        if (player == null ||
-            finishLine == null ||
-            obstaclePrefabs == null ||
-            obstaclePrefabs.Length == 0)
-        {
-            return;
-        }
-
-        runStartZ = player.transform.position.z;
-
-        var random = new System.Random(
-            randomizeEachRun
-                ? Environment.TickCount
-                : seed
-        );
-
-        float centerX =
-            player.transform.position.x;
-
-        float laneWidth =
-            player.LaneDistance;
-
-        float end =
-            finishLine.position.z -
-            finishApproach;
-
-        float z =
-            Mathf.Max(
-                startDistance,
-                player.transform.position.z + 20f
-            );
-
-        int lastSafeLane = 0;
-        int row = 0;
-
+        if (player == null || finishLine == null || obstaclePrefabs == null || obstaclePrefabs.Length == 0) return;
+        if (progressSource == null || progressSource.Player != player.transform)
+            foreach (var progress in FindObjectsByType<LevelProgressHUD>(FindObjectsSortMode.None))
+                if (progress.Player == player.transform) { progressSource = progress; break; }
+        playerRadius = player.GetComponent<CharacterController>().radius + 0.2f;
+        BuildPalette();
+        if (palette.Count == 0) return;
+        var random = new System.Random(randomizeEachRun ? Environment.TickCount : seed);
+        float centerX = player.transform.position.x;
+        float laneWidth = player.LaneDistance;
+        float end = finishLine.position.z - finishApproach;
+        float z = Mathf.Max(startDistance, player.transform.position.z + 20f);
+        int lastSafeLane = 0, row = 0, powerIndex = 0;
+        float previousEnd = z - ReactionDistance - 12f;
+        float safeRunStart = previousEnd;
+        float nextPowerUp = z + 55f;
         while (z < end)
         {
-            if (z > gapStart - 18f &&
-                z < gapEnd + 18f)
+            float difficulty = DifficultyAt(z);
+            int safeLane = row > 0 && random.NextDouble() < Mathf.Lerp(0.15f, 0.38f, difficulty)
+                ? Mathf.Clamp(lastSafeLane + (random.Next(2) == 0 ? -1 : 1), -1, 1) : lastSafeLane;
+            int firstLane = safeLane == -1 ? 0 : -1;
+            int secondLane = safeLane == 1 ? 0 : 1;
+            var first = ChooseObstacle(random, firstLane, safeLane, difficulty);
+            var second = random.NextDouble() < Mathf.Lerp(0.22f, 0.68f, difficulty)
+                ? ChooseObstacle(random, secondLane, safeLane, difficulty) : null;
+            float stagger = second != null && random.NextDouble() < difficulty * 0.45f ? 2.5f : 0f;
+            bool peel = bananaPeelPrefab != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.14f, difficulty);
+            bool droppingCoconut = fallingCoconutPrefab != null && sceneryPrefabs != null && sceneryPrefabs.Length > 0
+                && sceneryPrefabs[0] != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.13f, difficulty);
+            float lead = Mathf.Max(8f, player.ForwardSpeed * 0.8f + 2f);
+            float back = 4f, front = 5f; // Include pickup paths, not only damaging colliders.
+            IncludeEnvelope(first, 0, ref back, ref front);
+            IncludeEnvelope(second, stagger, ref back, ref front);
+            if (peel) back = Mathf.Max(back, lead + 1.5f);
+            back += playerRadius; front += playerRadius;
+            // Different safe lanes may not overlap even at a hazard's maximum backwards travel.
+            if (safeLane != lastSafeLane) z = Mathf.Max(z, previousEnd + ReactionDistance + back);
+            else z = Mathf.Max(z, safeRunStart + back);
+            if (z + front >= end) break;
+            if (z + front > gapStart - 18f && z - back < gapEnd + 18f)
             {
-                z = gapEnd + 20f;
+                z = gapEnd + 20f + back;
+                lastSafeLane = 0; previousEnd = safeRunStart = gapEnd + 3f;
                 continue;
             }
-
-            // A safe lane moves at most one lane per row.
-            // Every row has a clear route.
-            int safeLane =
-                Mathf.Clamp(
-                    lastSafeLane +
-                    random.Next(-1, 2),
-                    -1,
-                    1
-                );
-
-            int pattern = row % 4;
-
-            int firstLane =
-                safeLane == -1
-                    ? 0
-                    : -1;
-
-            int secondLane =
-                safeLane == 1
-                    ? 0
-                    : 1;
-
-            // Put peels before occasional rows,
-            // outside the clear lane.
-            if (bananaPeelPrefab != null &&
-                row % 4 == 2)
+            difficulty = DifficultyAt(z);
+            SpawnObstacle(first, centerX + firstLane * laneWidth, z);
+            SpawnObstacle(second, centerX + secondLane * laneWidth, z + stagger);
+            if (peel)
             {
-                float lead =
-                    Mathf.Max(
-                        8f,
-                        player.ForwardSpeed *
-                        0.8f +
-                        2f
-                    );
-
-                float peelZ =
-                    z - lead;
-
-                if (peelZ > gapEnd + 3f ||
-                    peelZ < gapStart - 3f)
-                {
-                    Instantiate(
-                        bananaPeelPrefab,
-                        new Vector3(
-                            centerX +
-                            firstLane *
-                            laneWidth,
-                            groundHeight,
-                            peelZ
-                        ),
-                        Quaternion.identity,
-                        transform
-                    );
-
-                    SpawnedPeelCount++;
-                }
+                Instantiate(bananaPeelPrefab, new Vector3(centerX + firstLane * laneWidth, groundHeight, z - lead), Quaternion.identity, transform);
+                SpawnedPeelCount++;
             }
-
-            SpawnObstacle(
-                random,
-                centerX +
-                firstLane *
-                laneWidth,
-                z,
-                row
-            );
-
-            if (pattern == 1 ||
-                pattern == 3)
+            if (droppingCoconut)
             {
-                SpawnObstacle(
-                    random,
-                    centerX +
-                    secondLane *
-                    laneWidth,
-                    z +
-                    (
-                        pattern == 3
-                            ? 2.5f
-                            : 0f
-                    ),
-                    row + 2
-                );
+                var tree = Instantiate(sceneryPrefabs[0], new Vector3(centerX - 8f, groundHeight, z - 2f), Quaternion.identity, transform);
+                foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                tree.AddComponent<FallingCoconutSpawner>().Configure(player, fallingCoconutPrefab, firstLane);
             }
-
             if (bananaPrefab != null)
             {
-                for (int b = 0; b < 3; b++)
-                {
-                    SpawnPickup(
-                        bananaPrefab,
-                        new Vector3(
-                            centerX +
-                            safeLane *
-                            laneWidth,
-                            groundHeight +
-                            1.1f,
-                            z - 4f +
-                            b * 2.5f
-                        )
-                    );
-                }
+                for (int b = 0; b < 3; b++) SpawnPickup(bananaPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.1f, z - 4 + b * 2.5f));
+                // More frequent adjacent-lane transitions create demanding, still-safe banana trails.
+                if (safeLane != lastSafeLane)
+                    for (int b = 1; b <= 3; b++)
+                    {
+                        float t = b / 4f;
+                        SpawnPickup(bananaPrefab, new Vector3(centerX + Mathf.Lerp(lastSafeLane, safeLane, t) * laneWidth,
+                            groundHeight + 1.1f, Mathf.Lerp(previousEnd + 0.2f, z - back - 0.2f, t)));
+                    }
             }
-
-            if (coconutPrefab != null &&
-                row % 5 == 0)
+            if (coconutPrefab != null && row % 5 == 0)
+                SpawnPickup(coconutPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
+            if (powerUpPrefabs != null && powerUpPrefabs.Length > 0 && z >= nextPowerUp)
             {
-                SpawnPickup(
-                    coconutPrefab,
-                    new Vector3(
-                        centerX +
-                        safeLane *
-                        laneWidth,
-                        groundHeight +
-                        0.8f,
-                        z + 5f
-                    )
-                );
+                int kind = powerIndex++ % powerUpPrefabs.Length;
+                if (powerUpPrefabs[kind] != null)
+                    Instantiate(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1), Quaternion.identity, transform);
+                nextPowerUp = z + powerUpSpacing / Mathf.Lerp(1f, powerUpFrequencyMultiplier, difficulty);
             }
-
-            if (powerUpPrefabs != null &&
-                powerUpPrefabs.Length >= 3)
-            {
-                int kind =
-                    row == 4
-                        ? 0
-                        : row == 9
-                            ? 2
-                            : row == 15
-                                ? 1
-                                : -1;
-
-                if (kind >= 0 &&
-                    powerUpPrefabs[kind] != null)
-                {
-                    Instantiate(
-                        powerUpPrefabs[kind],
-                        new Vector3(
-                            centerX +
-                            safeLane *
-                            laneWidth,
-                            groundHeight +
-                            1.15f,
-                            z + 5f
-                        ),
-                        Quaternion.identity,
-                        transform
-                    );
-                }
-            }
-
-            if (bananaPrefab != null &&
-                row >= 15 &&
-                row <= 17)
-            {
-                for (int b = 0; b < 4; b++)
-                {
-                    SpawnPickup(
-                        bananaPrefab,
-                        new Vector3(
-                            centerX +
-                            safeLane *
-                            laneWidth,
-                            groundHeight +
-                            2.2f +
-                            Mathf.Sin(
-                                b / 3f *
-                                Mathf.PI
-                            ) *
-                            1.8f,
-                            z +
-                            5f +
-                            b *
-                            2.2f
-                        )
-                    );
-                }
-            }
-
+            sections.Add(new Section(z, z - back, z + front, difficulty, safeLane));
+            if (safeLane != lastSafeLane) safeRunStart = z - back;
+            previousEnd = Mathf.Max(previousEnd, z + front);
             lastSafeLane = safeLane;
             row++;
-
-            z += Mathf.Lerp(
-                minimumSpacing,
-                Mathf.Max(
-                    minimumSpacing,
-                    maximumSpacing
-                ),
-                (float)random.NextDouble()
-            );
+            z += Mathf.Max(player.ForwardSpeed * minimumReactionSeconds,
+                Mathf.Lerp(minimumSpacing, maximumSpacing, (float)random.NextDouble())
+                * Mathf.Lerp(1.25f, 1f / obstacleFrequencyMultiplier, difficulty));
         }
-
         PatternCount = row;
-
-        if (sceneryPrefabs == null ||
-            sceneryPrefabs.Length == 0)
-        {
-            return;
-        }
-
-        for (
-            z = startDistance - 10f;
-            z < finishLine.position.z + 15f;
-            z += Mathf.Max(
-                6f,
-                scenerySpacing
-            ))
-        {
-            for (
-                int side = -1;
-                side <= 1;
-                side += 2)
-            {
-                if (z > gapStart - 2f &&
-                    z < gapEnd + 2f)
-                {
-                    continue;
-                }
-
-                var prefab =
-                    sceneryPrefabs[
-                        random.Next(
-                            sceneryPrefabs.Length
-                        )
-                    ];
-
-                if (prefab == null)
-                    continue;
-
-                var tree =
-                    Instantiate(
-                        prefab,
-                        new Vector3(
-                            centerX +
-                            side *
-                            (
-                                7f +
-                                (float)
-                                random.NextDouble() *
-                                5f
-                            ),
-                            groundHeight,
-                            z
-                        ),
-                        Quaternion.Euler(
-                            0f,
-                            random.Next(360),
-                            0f
-                        ),
-                        transform
-                    );
-
-                tree.transform.localScale *=
-                    Mathf.Lerp(
-                        0.8f,
-                        1.2f,
-                        (float)random.NextDouble()
-                    );
-
-                foreach (
-                    var collider
-                    in tree.GetComponentsInChildren<Collider>())
-                {
-                    collider.enabled = false;
-                }
-
-                if (fallingCoconutPrefab != null &&
-                    Mathf.RoundToInt(
-                        z / scenerySpacing
-                    ) %
-                    8 ==
-                    0 &&
-                    side < 0)
-                {
-                    // Use tropical palm for falling coconuts.
-                    if (sceneryPrefabs[0] != null &&
-                        prefab != sceneryPrefabs[0])
-                    {
-                        Destroy(tree);
-
-                        tree =
-                            Instantiate(
-                                sceneryPrefabs[0],
-                                new Vector3(
-                                    centerX +
-                                    side * 8f,
-                                    groundHeight,
-                                    z
-                                ),
-                                Quaternion.identity,
-                                transform
-                            );
-
-                        foreach (
-                            var collider
-                            in tree.GetComponentsInChildren<Collider>())
-                        {
-                            collider.enabled = false;
-                        }
-                    }
-
-                    tree.AddComponent<FallingCoconutSpawner>()
-                        .Configure(
-                            player,
-                            fallingCoconutPrefab,
-                            random.Next(-1, 2)
-                        );
-                }
-
-                var outerTree =
-                    Instantiate(
-                        prefab,
-                        new Vector3(
-                            centerX +
-                            side *
-                            (
-                                17f +
-                                (float)
-                                random.NextDouble() *
-                                4f
-                            ),
-                            groundHeight,
-                            z + 5f
-                        ),
-                        Quaternion.Euler(
-                            0f,
-                            random.Next(360),
-                            0f
-                        ),
-                        transform
-                    );
-
-                foreach (
-                    var collider
-                    in outerTree.GetComponentsInChildren<Collider>())
-                {
-                    collider.enabled = false;
-                }
-
-                if (roadsideShrubPrefab != null)
-                {
-                    var shrub =
-                        Instantiate(
-                            roadsideShrubPrefab,
-                            new Vector3(
-                                centerX +
-                                side *
-                                6.7f,
-                                groundHeight,
-                                z + 3f
-                            ),
-                            Quaternion.Euler(
-                                0f,
-                                random.Next(360),
-                                0f
-                            ),
-                            transform
-                        );
-
-                    shrub.transform.localScale *=
-                        0.65f;
-
-                    foreach (
-                        var collider
-                        in shrub.GetComponentsInChildren<Collider>())
-                    {
-                        collider.enabled = false;
-                    }
-                }
-            }
-        }
+        BuildScenery(random, centerX);
     }
 
-    private void SpawnObstacle(
-        System.Random random,
-        float x,
-        float z,
-        int variety)
+    private void BuildScenery(System.Random random, float centerX)
     {
-        // Cycle the palette as well as varying it,
-        // so all obstacle types appear each run.
-        var prefab =
-            obstaclePrefabs[
-                (
-                    variety +
-                    random.Next(2)
-                ) %
-                obstaclePrefabs.Length
-            ];
-
-        if (prefab == null)
-            return;
-
-        GameObject spawned =
-            Instantiate(
-                prefab,
-                new Vector3(
-                    x,
-                    groundHeight,
-                    z
-                ),
-                Quaternion.identity,
-                transform
-            );
-
-        // If this obstacle contains a moving hazard,
-        // connect it to this player's difficulty.
-        DynamicRunnerHazard[] hazards =
-            spawned.GetComponentsInChildren<
-                DynamicRunnerHazard
-            >(true);
-
-        foreach (
-            DynamicRunnerHazard hazard
-            in hazards)
-        {
-            if (hazard != null)
+        if (sceneryPrefabs == null || sceneryPrefabs.Length == 0) return;
+        for (float z = startDistance - 10; z < finishLine.position.z + 15; z += Mathf.Max(6, scenerySpacing))
+            for (int side = -1; side <= 1; side += 2)
             {
-                hazard.Configure(
-                    player,
-                    this
-                );
+                if (z > gapStart - 2f && z < gapEnd + 2f) continue;
+                var prefab = sceneryPrefabs[random.Next(sceneryPrefabs.Length)];
+                if (prefab == null) continue;
+                var tree = Instantiate(prefab, new Vector3(centerX + side * (7f + (float)random.NextDouble() * 5f), groundHeight, z),
+                    Quaternion.Euler(0, random.Next(360), 0), transform);
+                tree.transform.localScale *= Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble());
+                foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                // Dropping palms are authored with obstacle rows so they cannot target the safe lane.
+                var outerTree = Instantiate(prefab, new Vector3(centerX + side * (17f + (float)random.NextDouble() * 4f), groundHeight, z + 5),
+                    Quaternion.Euler(0, random.Next(360), 0), transform);
+                foreach (var collider in outerTree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                if (roadsideShrubPrefab != null)
+                {
+                    var shrub = Instantiate(roadsideShrubPrefab, new Vector3(centerX + side * 6.7f, groundHeight, z + 3),
+                        Quaternion.Euler(0, random.Next(360), 0), transform);
+                    shrub.transform.localScale *= 0.65f;
+                    foreach (var collider in shrub.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                }
             }
-        }
+    }
 
+    private void SpawnObstacle(ObstacleProfile profile, float x, float z)
+    {
+        if (profile == null) return;
+        var obstacle = Instantiate(profile.prefab, new Vector3(x, groundHeight, z), Quaternion.identity, transform);
+        foreach (var hazard in obstacle.GetComponentsInChildren<DynamicRunnerHazard>(true)) hazard.Configure(player, this);
         SpawnedObstacleCount++;
     }
 
-    private void SpawnPickup(
-        GameObject prefab,
-        Vector3 visibleCenter)
+    private static void IncludeEnvelope(ObstacleProfile profile, float offset, ref float back, ref float front)
     {
-        var pickup =
-            Instantiate(
-                prefab,
-                visibleCenter,
-                prefab.transform.rotation,
-                transform
-            );
+        if (profile == null) return;
+        back = Mathf.Max(back, profile.travel - profile.bounds.min.z - offset);
+        front = Mathf.Max(front, profile.bounds.max.z + offset);
+    }
 
-        var sphere =
-            pickup.GetComponent<SphereCollider>();
-
-        // Imported collectible meshes have offset pivots;
-        // collider stays centered on the visual.
-        if (sphere != null)
+    private ObstacleProfile ChooseObstacle(System.Random random, int lane, int safeLane, float difficulty)
+    {
+        bool dynamic = random.NextDouble() < Mathf.Lerp(earlyDynamicChance, lateDynamicChance, difficulty);
+        float safeX = safeLane * player.LaneDistance;
+        for (int pass = 0; pass < 2; pass++)
         {
-            pickup.transform.position +=
-                visibleCenter -
-                pickup.transform.TransformPoint(
-                    sphere.center
-                );
+            ObstacleProfile selected = null; int count = 0;
+            foreach (var candidate in palette)
+            {
+                if (candidate.dynamic != dynamic) continue;
+                float left = lane * player.LaneDistance + candidate.bounds.min.x - playerRadius;
+                float right = lane * player.LaneDistance + candidate.bounds.max.x + playerRadius;
+                if (safeX >= left && safeX <= right) continue;
+                if (random.Next(++count) == 0) selected = candidate;
+            }
+            if (selected != null) return selected;
+            dynamic = !dynamic;
         }
+        return null;
+    }
+
+    private void BuildPalette()
+    {
+        palette.Clear();
+        foreach (var prefab in obstaclePrefabs)
+        {
+            if (prefab == null) continue;
+            bool found = false; Bounds bounds = default;
+            foreach (var collider in prefab.GetComponentsInChildren<BoxCollider>())
+            {
+                if (!collider.enabled) continue;
+                var matrix = Matrix4x4.Scale(prefab.transform.localScale) * prefab.transform.worldToLocalMatrix * collider.transform.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 sign = new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1);
+                    Vector3 point = matrix.MultiplyPoint3x4(collider.center + Vector3.Scale(collider.size * 0.5f, sign));
+                    if (!found) { bounds = new Bounds(point, Vector3.zero); found = true; } else bounds.Encapsulate(point);
+                }
+            }
+            if (!found) continue;
+            var profile = new ObstacleProfile { prefab = prefab, bounds = bounds };
+            foreach (var hazard in prefab.GetComponentsInChildren<DynamicRunnerHazard>())
+            { profile.dynamic = true; profile.travel = Mathf.Max(profile.travel, hazard.TravelLimit); }
+            palette.Add(profile);
+        }
+    }
+
+    private void SpawnPickup(GameObject prefab, Vector3 visibleCenter)
+    {
+        var pickup = Instantiate(prefab, visibleCenter, prefab.transform.rotation, transform);
+        var sphere = pickup.GetComponent<SphereCollider>();
+        if (sphere != null) pickup.transform.position += visibleCenter - pickup.transform.TransformPoint(sphere.center);
     }
 
     private void OnValidate()
     {
-        minimumSpacing =
-            Mathf.Max(
-                8f,
-                minimumSpacing
-            );
-
-        maximumSpacing =
-            Mathf.Max(
-                minimumSpacing,
-                maximumSpacing
-            );
-
-        maxHazardSpeedMultiplier =
-            Mathf.Max(
-                1f,
-                maxHazardSpeedMultiplier
-            );
+        minimumSpacing = Mathf.Max(8f, minimumSpacing);
+        maximumSpacing = Mathf.Max(minimumSpacing, maximumSpacing);
+        obstacleFrequencyMultiplier = Mathf.Clamp(obstacleFrequencyMultiplier, 1f, 1.3f);
+        maxHazardSpeedMultiplier = Mathf.Clamp(maxHazardSpeedMultiplier, 1f, 1.3f);
+        powerUpFrequencyMultiplier = Mathf.Clamp(powerUpFrequencyMultiplier, 0.65f, 1f);
+        minimumReactionSeconds = Mathf.Max(0.8f, minimumReactionSeconds);
+        lateDynamicChance = Mathf.Max(earlyDynamicChance, lateDynamicChance);
     }
 }

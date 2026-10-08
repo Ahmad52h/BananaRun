@@ -8,6 +8,9 @@ public class RunnerAudio : MonoBehaviour
     [Header("Clips")]
     [SerializeField] private AudioClip backgroundMusic;
     [SerializeField] private AudioClip bananaCollect;
+    [SerializeField] private AudioClip monkeyHurt;
+    [SerializeField, Range(0f, 1f)] private float hurtVolume = 0.6f;
+    private AudioSource hurtSource;
     [Header("Mix")]
     [SerializeField, Range(0f, 1f)] private float musicVolume = 0.22f;
     [SerializeField, Range(0f, 1f)] private float bananaVolume = 0.65f;
@@ -37,6 +40,9 @@ public class RunnerAudio : MonoBehaviour
         effectsSource.playOnAwake = false;
         effectsSource.loop = false;
         effectsSource.spatialBlend = 0f;
+        hurtSource = gameObject.AddComponent<AudioSource>();
+        hurtSource.playOnAwake = false;
+        hurtSource.spatialBlend = 0f;
     }
 
     private void Start()
@@ -71,6 +77,13 @@ public class RunnerAudio : MonoBehaviour
         effectsSource.PlayOneShot(clip, bananaVolume);
     }
 
+    public void PlayHurt()
+    {
+        if (!isActiveAndEnabled || hurtSource == null || monkeyHurt == null) return;
+        // Separate voice avoids changing the pitch of an overlapping banana combo.
+        hurtSource.PlayOneShot(monkeyHurt, hurtVolume);
+    }
+
     private void OnValidate()
     {
         if (musicSource != null) musicSource.volume = musicVolume;
@@ -82,6 +95,7 @@ public class RunnerAudio : MonoBehaviour
         SettingsPanelController.Changed -= ApplySettings;
         if (musicSource != null) musicSource.Stop();
         if (effectsSource != null) effectsSource.Stop();
+        if (hurtSource != null) hurtSource.Stop();
     }
 
     private void OnDestroy()

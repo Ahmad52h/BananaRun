@@ -18,6 +18,7 @@ public class CoconutThrower : MonoBehaviour
     public bool HasCoconut => currentCoconuts > 0;
     public int CurrentCoconuts => currentCoconuts;
     public int MaxCoconuts => maxCoconuts;
+    public event System.Action<int> CountChanged;
 
     public bool CanThrow =>
         HasCoconut &&
@@ -37,6 +38,7 @@ public class CoconutThrower : MonoBehaviour
             return false;
 
         currentCoconuts++;
+        CountChanged?.Invoke(currentCoconuts);
         return true;
     }
 
@@ -46,6 +48,7 @@ public class CoconutThrower : MonoBehaviour
             return;
 
         currentCoconuts--;
+        CountChanged?.Invoke(currentCoconuts);
 
         // تشغيل أنيميشن الرمي باليدين تلقائياً دون تشويه
         if (runnerAnimation != null)

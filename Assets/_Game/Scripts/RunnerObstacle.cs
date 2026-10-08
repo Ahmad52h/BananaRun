@@ -9,6 +9,12 @@ public class RunnerObstacle : MonoBehaviour
     [SerializeField] private bool canSlideUnder;
 
     [SerializeField] private bool breakable;
+    [Header("Normal Player Impact")]
+    [Tooltip("Independent of coconut-projectile breakability. Special hazard components are always excluded.")]
+    [SerializeField] private bool breakOnPlayerHit = true;
+    [SerializeField] private GiantImpactEffect playerHitImpactPrefab;
+    [Tooltip("Whole obstacle instance to remove, including wrapper visuals and colliders.")]
+    [SerializeField] private GameObject obstacleRoot;
     [Header("Break Rewards")]
     [SerializeField] private CrateBreakEffect breakEffectPrefab;
     [SerializeField] private GameObject bananaPrefab;
@@ -18,6 +24,11 @@ public class RunnerObstacle : MonoBehaviour
 
     private bool touched;
     private bool broken;
+    public bool BreaksOnPlayerHit => breakOnPlayerHit &&
+        GetComponentInParent<DynamicRunnerHazard>(true) == null &&
+        GetComponentInChildren<DynamicRunnerHazard>(true) == null &&
+        GetComponentInParent<FallingCoconutHazard>(true) == null &&
+        GetComponentInParent<BananaPeelHazard>(true) == null;
 
     private void Awake()
     {
@@ -71,8 +82,13 @@ public class RunnerObstacle : MonoBehaviour
         }
 
         // إذا كان القرد واقفاً ولم يتزحلق، يتأذى
+        bool normalImpact = BreaksOnPlayerHit;
+        if (normalImpact && health.IsProtected) return;
         touched = true;
+        int previousHearts = health.Hearts;
         health.TakeHit();
+        if (normalImpact && health.Hearts < previousHearts)
+            BreakObstacle(true);
     }
 
     private void OnTriggerStay(Collider other) => OnTriggerEnter(other);
@@ -88,20 +104,36 @@ public class RunnerObstacle : MonoBehaviour
 
     public void Shatter()
     {
+        BreakObstacle(false);
+    }
+
+    private void BreakObstacle(bool normalPlayerHit)
+    {
         if (broken) return;
 
         BoxCollider hitbox = GetComponent<BoxCollider>();
         if (hitbox == null) { gameObject.SetActive(false); return; }
         broken = true;
 
-        var powers = PowerUpManager.ActivePlayer;
-        if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
-            powers.PlayCrushEffect(hitbox.bounds.center);
-
         Bounds bounds = hitbox.bounds;
 
         // Stop collisions immediately.
         hitbox.enabled = false;
+        GameObject removalRoot = obstacleRoot != null && transform.IsChildOf(obstacleRoot.transform)
+            ? obstacleRoot : gameObject;
+        if (normalPlayerHit)
+        {
+            foreach (var collider in removalRoot.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+            // Reuse Giant's existing particle burst and its single short smash sound.
+            if (playerHitImpactPrefab != null) Instantiate(playerHitImpactPrefab, bounds.center, Quaternion.identity);
+        }
+        else
+        {
+            // Preserve the original Giant/projectile path and its existing audio ownership.
+            var powers = PowerUpManager.ActivePlayer;
+            if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
+                powers.PlayCrushEffect(bounds.center);
+        }
 
         // Spawn the effect independently from this obstacle.
         if (breakEffectPrefab != null)
@@ -144,6 +176,12 @@ public class RunnerObstacle : MonoBehaviour
             Instantiate(coconutPrefab, rewardPosition, Quaternion.identity);
         }
 
-        gameObject.SetActive(false);
+        if (normalPlayerHit)
+        {
+            // Independent fragments/particles remain visible after the intact mesh is removed.
+            removalRoot.SetActive(false);
+            Destroy(removalRoot);
+        }
+        else gameObject.SetActive(false);
     }
 }

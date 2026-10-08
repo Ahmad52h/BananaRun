@@ -818,6 +818,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RunnerObstacle
   canSlideUnder: 0
   breakable: 0
+  breakOnPlayerHit: 0
+  playerHitImpactPrefab: {fileID: 0}
+  obstacleRoot: {fileID: 0}
   breakEffectPrefab: {fileID: 0}
   bananaPrefab: {fileID: 0}
   coconutPrefab: {fileID: 0}
