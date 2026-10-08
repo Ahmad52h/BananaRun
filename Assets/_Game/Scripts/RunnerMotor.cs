@@ -13,6 +13,10 @@ public class RunnerMotor : MonoBehaviour
     [Header("Jump")]
     [SerializeField, Min(0.1f)] private float jumpHeight = 2.3f;
     [SerializeField] private float gravity = -21f;
+    [Header("Glider Jump")]
+    [SerializeField, Range(1f, 2.5f)] private float gliderHeightMultiplier = 1.7f;
+    private const float GliderGravityScale = 0.35f;
+    private bool gliderJump;
 
     [Header("Slide")]
     [Tooltip("مدة الزحلقة بالثواني - زدناها ليعبر العائق كاملاً دون أن يقف تحته")]
@@ -52,12 +56,16 @@ public class RunnerMotor : MonoBehaviour
     }
 
     public float LaneDistance => laneDistance;
+    public float LaneChangeDuration => laneDistance / Mathf.Max(0.01f, laneChangeSpeed);
     public float ForwardSpeed => forwardSpeed;
     public float BaseGravity => gravity;
-    public float JumpDuration => 2f * Mathf.Sqrt(jumpHeight * -2f * gravity) / -gravity;
+    public float JumpDuration => gliderJump
+        ? 2f * Mathf.Sqrt(jumpHeight * gliderHeightMultiplier * -2f * gravity * GliderGravityScale) / (-gravity * GliderGravityScale)
+        : 2f * Mathf.Sqrt(jumpHeight * -2f * gravity) / -gravity;
+    public bool IsGliderJump => gliderJump;
     public bool IsSliding => sliding;
-    public float EffectiveGravity => gravity * (powerUps != null && powerUps.IsActive(PowerUpType.Glider) &&
-        controller != null && !controller.isGrounded ? 0.35f : 1f);
+    // Latch the arc through landing so an expiring pickup cannot change gravity mid-jump.
+    public float EffectiveGravity => gravity * (gliderJump ? GliderGravityScale : 1f);
     public float CurrentSpeed => forwardSpeed * (slowdownDuration > 0f
         ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
         : 1f);
@@ -96,6 +104,12 @@ public class RunnerMotor : MonoBehaviour
         if (controller.isGrounded && verticalVelocity < 0f)
         {
             verticalVelocity = -2f;
+            gliderJump = false;
+        }
+        else if (!controller.isGrounded && powerUps != null && powerUps.IsActive(PowerUpType.Glider))
+        {
+            // Preserve gliding off ledges and collecting the ability while airborne.
+            gliderJump = true;
         }
 
         verticalVelocity += EffectiveGravity * deltaTime;
@@ -150,9 +164,9 @@ public class RunnerMotor : MonoBehaviour
         if (!isActiveAndEnabled || controller == null || !controller.enabled || sliding || !controller.isGrounded)
             return;
 
-        verticalVelocity = Mathf.Sqrt(
-            jumpHeight * -2f * gravity
-        );
+        gliderJump = powerUps != null && powerUps.IsActive(PowerUpType.Glider);
+        verticalVelocity = Mathf.Sqrt(jumpHeight * (gliderJump ? gliderHeightMultiplier : 1f)
+            * -2f * gravity * (gliderJump ? GliderGravityScale : 1f));
     }
 
     public bool Slide()
@@ -192,7 +206,7 @@ public class RunnerMotor : MonoBehaviour
         if (sliding && controller != null) EndSlide();
     }
 
-    public void ResetVerticalVelocity() => verticalVelocity = -2f;
+    public void ResetVerticalVelocity() { verticalVelocity = -2f; gliderJump = false; }
 
     private void OnValidate()
     {

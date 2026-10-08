@@ -7,6 +7,10 @@ public class RunnerCamera : MonoBehaviour
     [Header("Lane Follow")]
     [SerializeField, Range(0f, 1f)] private float horizontalFollow = 0.5f;
     [SerializeField, Min(0.01f)] private float horizontalSmoothTime = 0.15f;
+    [Header("Glider Framing")]
+    [SerializeField, Min(0.01f)] private float verticalSmoothTime = 0.12f;
+    [SerializeField, Min(0f)] private float jumpFramingDeadZone = 0.65f;
+    private float jumpLift, verticalFollowVelocity;
     [Header("Giant")]
     [SerializeField] private float giantFov = 75f;
     [SerializeField] private Vector3 giantOffset = new Vector3(0, 1.2f, -3.5f);
@@ -65,7 +69,10 @@ public class RunnerCamera : MonoBehaviour
         float targetX = trackCenterX + offset.x + (target.position.x - trackCenterX) * horizontalFollow;
         smoothX = Mathf.SmoothDamp(smoothX, targetX, ref horizontalVelocity, horizontalSmoothTime);
         Vector3 extra = giantOffset * giantBlend;
-        transform.position = new Vector3(smoothX + extra.x, groundReferenceY + offset.y + extra.y + impulse,
+        float desiredLift = motor != null && motor.IsGliderJump
+            ? Mathf.Max(0f, target.position.y - groundReferenceY - jumpFramingDeadZone) : 0f;
+        jumpLift = Mathf.SmoothDamp(jumpLift, desiredLift, ref verticalFollowVelocity, verticalSmoothTime);
+        transform.position = new Vector3(smoothX + extra.x, groundReferenceY + offset.y + extra.y + impulse + jumpLift,
             target.position.z + offset.z + extra.z);
     }
 

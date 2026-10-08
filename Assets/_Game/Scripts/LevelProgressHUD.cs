@@ -16,20 +16,29 @@ public class LevelProgressHUD : MonoBehaviour
     private float velocity;
     private FinishGate finishGate;
     public float Progress { get; private set; }
+    public Transform Player => player;
+    public float RunLength => finishLine != null ? Mathf.Max(0f, finishLine.position.z - startZ) : 0f;
+    public float DistanceTravelled => player != null ? DistanceAt(player.position.z) : 0f;
+    public float DistanceAt(float worldZ) => Mathf.Max(0f, worldZ - startZ);
+    public float ProgressAt(float worldZ) => RunLength > 0f ? Mathf.Clamp01(DistanceAt(worldZ) / RunLength) : 0f;
 
-    private void Start()
+    private void Awake()
     {
         if (player != null) startZ = player.position.z;
         if (finishLine != null) finishGate = finishLine.GetComponent<FinishGate>();
+    }
+
+    private void Start()
+    {
         Draw(0f);
     }
 
     private void Update()
     {
         if (player == null || finishLine == null) return;
-        float length = finishLine.position.z - startZ;
+        float length = RunLength;
         if (length <= 0f) return;
-        Progress = Mathf.Clamp01((player.position.z - startZ) / length);
+        Progress = ProgressAt(player.position.z);
         if (finishGate != null && finishGate.Completed) Progress = 1f;
         displayedProgress = Mathf.SmoothDamp(displayedProgress, Progress, ref velocity,
             smoothingTime, Mathf.Infinity, Time.deltaTime);

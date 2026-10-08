@@ -32,7 +32,8 @@ public class RunnerAudio : MonoBehaviour
         musicSource.playOnAwake = false;
         musicSource.loop = true;
         musicSource.spatialBlend = 0f;
-        musicSource.volume = musicVolume;
+        musicSource.ignoreListenerVolume = true;
+        ApplySettings();
         effectsSource.playOnAwake = false;
         effectsSource.loop = false;
         effectsSource.spatialBlend = 0f;
@@ -43,11 +44,17 @@ public class RunnerAudio : MonoBehaviour
         if (playMusicOnStart) PlayMusic();
     }
 
+    private void OnEnable() { SettingsPanelController.Changed += ApplySettings; }
+    private void ApplySettings()
+    {
+        if (musicSource != null) musicSource.volume = musicVolume * SettingsPanelController.MusicVolume;
+    }
+
     public void PlayMusic()
     {
         if (musicSource == null || backgroundMusic == null) return;
         musicSource.clip = backgroundMusic;
-        musicSource.volume = musicVolume;
+        ApplySettings();
         musicSource.Play();
     }
 
@@ -72,6 +79,7 @@ public class RunnerAudio : MonoBehaviour
 
     private void OnDisable()
     {
+        SettingsPanelController.Changed -= ApplySettings;
         if (musicSource != null) musicSource.Stop();
         if (effectsSource != null) effectsSource.Stop();
     }

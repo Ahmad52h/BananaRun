@@ -15,9 +15,14 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private Color fullHeartColor = Color.white;
     [SerializeField] private Color emptyHeartColor = new Color(0.25f, 0.25f, 0.25f, 0.45f);
     [SerializeField] private TMP_Text resultText;
+    [Header("Tropical Results")]
+    [SerializeField] private Sprite roundedPanelSprite;
+    [SerializeField] private Sprite bananaResultIcon;
     private BananaInventory inventory;
     private PowerUpManager powers;
     private UnityEngine.UI.Button retryButton;
+    private UnityEngine.UI.Button homeButton;
+    private TMP_Text subtitle;
     private TMP_Text retryLabel, scoreText;
     private CanvasGroup resultGroup;
     private RectTransform card;
@@ -49,35 +54,49 @@ public class RunnerHUD : MonoBehaviour
 
         card = new GameObject("Result Card", typeof(RectTransform), typeof(UnityEngine.UI.Image)).GetComponent<RectTransform>();
         card.SetParent(gameOverPanel.transform, false);
-        card.anchorMin = new Vector2(0.08f, 0.22f);
-        card.anchorMax = new Vector2(0.92f, 0.78f);
+        card.anchorMin = new Vector2(0.06f, 0.20f);
+        card.anchorMax = new Vector2(0.94f, 0.80f);
         card.offsetMin = card.offsetMax = Vector2.zero;
-        card.GetComponent<UnityEngine.UI.Image>().color = new Color(0.055f, 0.16f, 0.085f, 0.98f);
+        StyleImage(card.GetComponent<UnityEngine.UI.Image>(), new Color(1f, 0.957f, 0.788f));
+        var backdrop = gameOverPanel.GetComponent<UnityEngine.UI.Image>();
+        if (backdrop != null) { backdrop.color = new Color(0.025f, 0.10f, 0.08f, 0.84f); backdrop.raycastTarget = true; }
         if (resultText != null)
         {
             resultText.transform.SetParent(card, false);
-            Layout(resultText.rectTransform, 0.72f, 0.96f);
+            Layout(resultText.rectTransform, 0.78f, 0.94f);
             resultText.alignment = TextAlignmentOptions.Center;
             resultText.enableAutoSizing = true;
             resultText.fontSizeMin = 24; resultText.fontSizeMax = 62;
-            resultText.color = new Color(1f, 0.86f, 0.28f);
+            resultText.color = new Color(0.09f, 0.24f, 0.20f);
+            resultText.fontStyle = FontStyles.Bold;
             resultText.raycastTarget = false;
         }
         scoreText = new GameObject("Result Score", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TMP_Text>();
         scoreText.transform.SetParent(card, false);
         if (resultText != null) scoreText.font = resultText.font;
-        Layout(scoreText.rectTransform, 0.28f, 0.52f);
+        Layout(scoreText.rectTransform, 0.40f, 0.54f);
         scoreText.alignment = TextAlignmentOptions.Center;
         scoreText.enableAutoSizing = true; scoreText.fontSizeMin = 20; scoreText.fontSizeMax = 38;
-        scoreText.color = Color.white; scoreText.raycastTarget = false;
+        scoreText.color = new Color(0.09f, 0.24f, 0.20f); scoreText.raycastTarget = false;
+        subtitle = new GameObject("Result Encouragement", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TMP_Text>();
+        subtitle.transform.SetParent(card, false);
+        if (resultText != null) subtitle.font = resultText.font;
+        Layout(subtitle.rectTransform, 0.70f, 0.78f);
+        subtitle.alignment = TextAlignmentOptions.Center; subtitle.enableAutoSizing = true;
+        subtitle.fontSizeMin = 20; subtitle.fontSizeMax = 30;
+        subtitle.color = new Color(0.09f, 0.24f, 0.20f); subtitle.raycastTarget = false;
+        var emblem = new GameObject("Banana Emblem", typeof(RectTransform), typeof(UnityEngine.UI.Image)).GetComponent<UnityEngine.UI.Image>();
+        emblem.transform.SetParent(card, false); emblem.sprite = bananaResultIcon; emblem.preserveAspect = true; emblem.raycastTarget = false;
+        Layout(emblem.rectTransform, 0.55f, 0.69f);
+        emblem.gameObject.SetActive(bananaResultIcon != null);
         stars = new ResultStar[3];
         for (int i = 0; i < stars.Length; i++)
         {
-            var star = new GameObject("Rating Star " + (i + 1), typeof(RectTransform), typeof(ResultStar)).GetComponent<ResultStar>();
+            var star = new GameObject("Rating Star " + (i + 1), typeof(RectTransform), typeof(CanvasRenderer), typeof(ResultStar)).GetComponent<ResultStar>();
             star.transform.SetParent(card, false);
             var rect = star.rectTransform;
             rect.anchorMin = new Vector2(0.28f + i * 0.16f, 0.55f);
-            rect.anchorMax = new Vector2(0.40f + i * 0.16f, 0.70f);
+            rect.anchorMax = new Vector2(0.40f + i * 0.16f, 0.69f);
             rect.offsetMin = rect.offsetMax = Vector2.zero;
             star.raycastTarget = false;
             stars[i] = star;
@@ -85,14 +104,45 @@ public class RunnerHUD : MonoBehaviour
         if (retryButton != null)
         {
             retryButton.transform.SetParent(card, false);
-            Layout((RectTransform)retryButton.transform, 0.07f, 0.23f);
+            Layout((RectTransform)retryButton.transform, 0.23f, 0.37f);
             retryLabel = retryButton.GetComponentInChildren<TMP_Text>(true);
             retryButton.onClick = new UnityEngine.UI.Button.ButtonClickedEvent();
             retryButton.onClick.AddListener(Retry);
             if (retryButton.targetGraphic != null) retryButton.targetGraphic.raycastTarget = true;
             if (retryLabel != null) retryLabel.raycastTarget = false;
+            StyleButton(retryButton, new Color(1f, 0.83f, 0.286f), new Color(0.09f, 0.24f, 0.20f));
+            if (Application.CanStreamedLevelBeLoaded("MainMenu"))
+            {
+                homeButton = Instantiate(retryButton, card); homeButton.name = "Home Button";
+                Layout((RectTransform)homeButton.transform, 0.06f, 0.18f);
+                homeButton.onClick = new UnityEngine.UI.Button.ButtonClickedEvent();
+                homeButton.onClick.AddListener(Home);
+                var label = homeButton.GetComponentInChildren<TMP_Text>(); if (label != null) label.text = "HOME";
+                StyleButton(homeButton, new Color(0.09f, 0.24f, 0.20f), new Color(1f, 0.957f, 0.788f));
+            }
         }
         gameOverPanel.SetActive(false);
+    }
+
+    private void StyleImage(UnityEngine.UI.Image image, Color color)
+    {
+        image.color = color;
+        if (roundedPanelSprite != null) { image.sprite = roundedPanelSprite; image.type = UnityEngine.UI.Image.Type.Sliced; }
+    }
+    private void StyleButton(UnityEngine.UI.Button button, Color background, Color foreground)
+    {
+        var image = button.GetComponent<UnityEngine.UI.Image>();
+        if (image != null) { StyleImage(image, background); image.raycastTarget = true; button.targetGraphic = image; }
+        var label = button.GetComponentInChildren<TMP_Text>(true);
+        if (label != null)
+        {
+            Layout(label.rectTransform, 0.08f, 0.92f); label.color = foreground; label.fontStyle = FontStyles.Bold;
+            label.enableAutoSizing = true; label.fontSizeMin = 26; label.fontSizeMax = 44;
+            label.alignment = TextAlignmentOptions.Center; label.raycastTarget = false;
+        }
+        if (button.GetComponent<MenuButtonFeedback>() == null) button.gameObject.AddComponent<MenuButtonFeedback>();
+        var colors = button.colors; colors.normalColor = colors.highlightedColor = Color.white;
+        colors.pressedColor = new Color(.82f,.86f,.78f); button.colors = colors;
     }
 
     private static void Layout(RectTransform rect, float bottom, float top)
@@ -143,7 +193,9 @@ public class RunnerHUD : MonoBehaviour
         if (resultText != null) resultText.text = victory ? "VICTORY!" : "GAME OVER";
         int score = bananas + (powers != null ? powers.BonusPoints : 0);
         if (scoreText != null) scoreText.text = $"Bananas Collected: {bananas}" + (victory ? $"\nTotal Score: {score}" : "");
-        if (retryLabel != null) retryLabel.text = victory ? "Play Again" : "Retry";
+        if (retryLabel != null) retryLabel.text = victory ? "PLAY AGAIN" : "RESTART";
+        if (subtitle != null) subtitle.text = victory ? "You went bananas!" : "The jungle awaits another try.";
+        var emblem = card.Find("Banana Emblem"); if (emblem != null) emblem.gameObject.SetActive(!victory && bananaResultIcon != null);
         int rating = health != null ? Mathf.Clamp(health.Hearts, 1, 3) : 1;
         if (stars != null) for (int i = 0; i < stars.Length; i++)
         {
@@ -182,6 +234,15 @@ public class RunnerHUD : MonoBehaviour
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene("Level01", LoadSceneMode.Single);
+    }
+    public void Home()
+    {
+        if (restarting || !Application.CanStreamedLevelBeLoaded("MainMenu")) return;
+        restarting = true;
+        if (homeButton != null) homeButton.interactable = false;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        SceneManager.LoadScene("MainMenu", LoadSceneMode.Single);
     }
 }
 
