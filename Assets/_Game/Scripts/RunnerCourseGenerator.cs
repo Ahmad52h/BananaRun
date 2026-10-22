@@ -23,8 +23,24 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private BananaPeelHazard bananaPeelPrefab;
     [SerializeField] private float gapStart = 610f;
     [SerializeField] private float gapEnd = 642f;
+    [Tooltip("Lower bound of relative row-spacing jitter, normalized around the average of this pair. Not an absolute minimum gap.")]
     [SerializeField, Min(8f)] private float minimumSpacing = 12f;
+    [Tooltip("Upper bound of relative row-spacing jitter, normalized around the average of this pair. Not an absolute maximum gap.")]
     [SerializeField, Min(8f)] private float maximumSpacing = 20f;
+    [Header("Progressive patterns")]
+    [SerializeField, Min(8f)] private float easyObstacleSpacing = 25f;
+    [SerializeField, Min(8f)] private float hardObstacleSpacing = 15f;
+    [SerializeField, Range(0f, 1f)] private float easyDoubleObstacleChance = 0.18f;
+    [SerializeField, Range(0f, 1f)] private float hardDoubleObstacleChance = 0.72f;
+    [SerializeField, Range(0f, 1f)] private float easyLaneChangeChance = 0.15f;
+    [SerializeField, Range(0f, 1f)] private float hardLaneChangeChance = 0.55f;
+    [Header("Ability banana paths")]
+    [Tooltip("Chance of an elevated reward arc after a green glider pickup.")]
+    [SerializeField, Range(0f, 1f)] private float highBananaFrequency = 0.75f;
+    [Tooltip("Apex above the ground, clamped to the existing high jump's reach.")]
+    [SerializeField, Min(1f)] private float highBananaHeight = 4.7f;
+    [SerializeField, Range(5, 13)] private int highBananaCount = 9;
+    [SerializeField, Range(0, 24)] private int ropeBananaCount = 12;
     [Header("Difficulty (per runner)")]
     [SerializeField] private LevelProgressHUD progressSource;
     [SerializeField, Min(0f)] private float difficultyStartDistance = 90f;
@@ -45,11 +61,15 @@ public class RunnerCourseGenerator : MonoBehaviour
     public int SpawnedPeelCount { get; private set; }
     public int SpawnedObstacleCount { get; private set; }
     public int PatternCount { get; private set; }
+    public int HighBananaPathCount { get; private set; }
+    public GameObject BananaPrefab => bananaPrefab;
+    public int RopeBananaCount => ropeBananaCount;
     public RunnerMotor Player => player;
     public float Progress01 => progressSource != null && player != null ? progressSource.ProgressAt(player.transform.position.z) : 0f;
     public float Difficulty => player != null ? DifficultyAt(player.transform.position.z) : 0f;
     public float CurrentHazardSpeedMultiplier => Mathf.Lerp(1f, maxHazardSpeedMultiplier, Difficulty);
-    public float ReactionDistance => player != null ? player.ForwardSpeed * (minimumReactionSeconds + player.LaneChangeDuration) : 0f;
+    // Reserve against the cap, including future speed increases through the whole transition.
+    public float ReactionDistance => player != null ? player.MaximumForwardSpeed * (minimumReactionSeconds + player.LaneChangeDuration) : 0f;
 
     public readonly struct Section
     {
@@ -69,10 +89,20 @@ public class RunnerCourseGenerator : MonoBehaviour
     }
     private readonly List<ObstacleProfile> palette = new List<ObstacleProfile>();
     private float playerRadius;
+    private bool progressLookupComplete;
+    private bool warnedMissingProgress;
 
     public float DifficultyAt(float worldZ)
     {
-        if (progressSource == null || player == null || progressSource.Player != player.transform) return 0f;
+        if (progressSource == null || player == null || progressSource.Player != player.transform)
+        {
+            if (progressLookupComplete && !warnedMissingProgress)
+            {
+                Debug.LogWarning("RunnerCourseGenerator has no matching LevelProgressHUD; difficulty remains at baseline while course generation continues.", this);
+                warnedMissingProgress = true;
+            }
+            return 0f;
+        }
         float maximum = maximumDifficultyDistance > 0 ? maximumDifficultyDistance : progressSource.RunLength;
         return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(difficultyStartDistance,
             Mathf.Max(difficultyStartDistance + 1f, maximum), progressSource.DistanceAt(worldZ)));
@@ -80,18 +110,50 @@ public class RunnerCourseGenerator : MonoBehaviour
 
     private void Start()
     {
-        if (player == null || finishLine == null || obstaclePrefabs == null || obstaclePrefabs.Length == 0) return;
+        if (player == null)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: player reference is missing.", this);
+            return;
+        }
+        if (finishLine == null)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: finish line reference is missing.", this);
+            return;
+        }
+        if (obstaclePrefabs == null || obstaclePrefabs.Length == 0)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: obstacle prefab list is empty.", this);
+            return;
+        }
         if (progressSource == null || progressSource.Player != player.transform)
             foreach (var progress in FindObjectsByType<LevelProgressHUD>(FindObjectsSortMode.None))
                 if (progress.Player == player.transform) { progressSource = progress; break; }
-        playerRadius = player.GetComponent<CharacterController>().radius + 0.2f;
+        progressLookupComplete = true;
+        if (progressSource == null || progressSource.Player != player.transform) DifficultyAt(player.transform.position.z);
+        player.ConfigureDifficulty(this);
+        var controller = player.GetComponent<CharacterController>();
+        if (controller == null)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: player has no CharacterController.", this);
+            return;
+        }
+        playerRadius = controller.radius + 0.2f;
         BuildPalette();
-        if (palette.Count == 0) return;
+        if (palette.Count == 0)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: obstacle prefabs have no enabled BoxCollider profiles.", this);
+            return;
+        }
         var random = new System.Random(randomizeEachRun ? Environment.TickCount : seed);
         float centerX = player.transform.position.x;
         float laneWidth = player.LaneDistance;
         float end = finishLine.position.z - finishApproach;
         float z = Mathf.Max(startDistance, player.transform.position.z + 20f);
+        if (z >= end)
+        {
+            Debug.LogWarning("RunnerCourseGenerator cannot build a course: the finish approach starts before the first obstacle row.", this);
+            return;
+        }
         int lastSafeLane = 0, row = 0, powerIndex = 0;
         float previousEnd = z - ReactionDistance - 12f;
         float safeRunStart = previousEnd;
@@ -99,18 +161,18 @@ public class RunnerCourseGenerator : MonoBehaviour
         while (z < end)
         {
             float difficulty = DifficultyAt(z);
-            int safeLane = row > 0 && random.NextDouble() < Mathf.Lerp(0.15f, 0.38f, difficulty)
-                ? Mathf.Clamp(lastSafeLane + (random.Next(2) == 0 ? -1 : 1), -1, 1) : lastSafeLane;
+            int safeLane = row > 0 && random.NextDouble() < Mathf.Lerp(easyLaneChangeChance, hardLaneChangeChance, difficulty)
+                ? (lastSafeLane == 0 ? (random.Next(2) == 0 ? -1 : 1) : 0) : lastSafeLane;
             int firstLane = safeLane == -1 ? 0 : -1;
             int secondLane = safeLane == 1 ? 0 : 1;
             var first = ChooseObstacle(random, firstLane, safeLane, difficulty);
-            var second = random.NextDouble() < Mathf.Lerp(0.22f, 0.68f, difficulty)
+            var second = random.NextDouble() < Mathf.Lerp(easyDoubleObstacleChance, hardDoubleObstacleChance, difficulty)
                 ? ChooseObstacle(random, secondLane, safeLane, difficulty) : null;
             float stagger = second != null && random.NextDouble() < difficulty * 0.45f ? 2.5f : 0f;
             bool peel = bananaPeelPrefab != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.14f, difficulty);
             bool droppingCoconut = fallingCoconutPrefab != null && sceneryPrefabs != null && sceneryPrefabs.Length > 0
                 && sceneryPrefabs[0] != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.13f, difficulty);
-            float lead = Mathf.Max(8f, player.ForwardSpeed * 0.8f + 2f);
+            float lead = Mathf.Max(8f, player.MaximumForwardSpeed * 0.8f + 2f);
             float back = 4f, front = 5f; // Include pickup paths, not only damaging colliders.
             IncludeEnvelope(first, 0, ref back, ref front);
             IncludeEnvelope(second, stagger, ref back, ref front);
@@ -158,7 +220,21 @@ public class RunnerCourseGenerator : MonoBehaviour
             {
                 int kind = powerIndex++ % powerUpPrefabs.Length;
                 if (powerUpPrefabs[kind] != null)
+                {
                     Instantiate(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1), Quaternion.identity, transform);
+                    if (powerUpPrefabs[kind].Type == PowerUpType.Glider && bananaPrefab != null && random.NextDouble() < highBananaFrequency)
+                    {
+                        float arcStart = z + 1f + player.MaximumForwardSpeed * 0.8f;
+                        float arcLength = player.SpeedAtDifficulty(difficulty) * player.HighJumpDuration;
+                        float arcEnd = arcStart + arcLength;
+                        if (arcEnd + ReactionDistance < end && (arcEnd < gapStart - 18f || arcStart > gapEnd + 18f))
+                        {
+                            SpawnHighBananaArc(centerX + safeLane * laneWidth, arcStart, arcLength);
+                            // Keep this safe lane open through the complete jump and landing.
+                            front = Mathf.Max(front, arcEnd - z + playerRadius);
+                        }
+                    }
+                }
                 nextPowerUp = z + powerUpSpacing / Mathf.Lerp(1f, powerUpFrequencyMultiplier, difficulty);
             }
             sections.Add(new Section(z, z - back, z + front, difficulty, safeLane));
@@ -166,11 +242,15 @@ public class RunnerCourseGenerator : MonoBehaviour
             previousEnd = Mathf.Max(previousEnd, z + front);
             lastSafeLane = safeLane;
             row++;
-            z += Mathf.Max(player.ForwardSpeed * minimumReactionSeconds,
-                Mathf.Lerp(minimumSpacing, maximumSpacing, (float)random.NextDouble())
-                * Mathf.Lerp(1.25f, 1f / obstacleFrequencyMultiplier, difficulty));
+            float jitter = Mathf.Lerp(minimumSpacing, maximumSpacing, (float)random.NextDouble())
+                / Mathf.Max(1f, (minimumSpacing + maximumSpacing) * 0.5f);
+            z += Mathf.Max(player.MaximumForwardSpeed * minimumReactionSeconds,
+                Mathf.Lerp(easyObstacleSpacing, hardObstacleSpacing, difficulty) * jitter
+                / Mathf.Lerp(1f, obstacleFrequencyMultiplier, difficulty));
         }
         PatternCount = row;
+        if (row == 0)
+            Debug.LogWarning("RunnerCourseGenerator produced no rows: the available space before the finish is too short for the configured safety bounds.", this);
         BuildScenery(random, centerX);
     }
 
@@ -199,6 +279,19 @@ public class RunnerCourseGenerator : MonoBehaviour
                     foreach (var collider in shrub.GetComponentsInChildren<Collider>()) collider.enabled = false;
                 }
             }
+    }
+
+    private void SpawnHighBananaArc(float x, float start, float length)
+    {
+        var path = new GameObject("High Jump Banana Arc").transform;
+        path.SetParent(transform, false);
+        float apex = Mathf.Clamp(highBananaHeight, player.NormalJumpHeight + 1.4f, player.HighJumpHeight + 0.9f);
+        for (int i = 0; i < highBananaCount; i++)
+        {
+            float t = (i + 1f) / (highBananaCount + 1f);
+            SpawnPickup(bananaPrefab, new Vector3(x, groundHeight + 1f + (apex - 1f) * 4f * t * (1f - t), start + length * t)).transform.SetParent(path, true);
+        }
+        HighBananaPathCount++;
     }
 
     private void SpawnObstacle(ObstacleProfile profile, float x, float z)
@@ -263,11 +356,12 @@ public class RunnerCourseGenerator : MonoBehaviour
         }
     }
 
-    private void SpawnPickup(GameObject prefab, Vector3 visibleCenter)
+    private GameObject SpawnPickup(GameObject prefab, Vector3 visibleCenter)
     {
         var pickup = Instantiate(prefab, visibleCenter, prefab.transform.rotation, transform);
         var sphere = pickup.GetComponent<SphereCollider>();
         if (sphere != null) pickup.transform.position += visibleCenter - pickup.transform.TransformPoint(sphere.center);
+        return pickup;
     }
 
     private void OnValidate()
@@ -279,5 +373,9 @@ public class RunnerCourseGenerator : MonoBehaviour
         powerUpFrequencyMultiplier = Mathf.Clamp(powerUpFrequencyMultiplier, 0.65f, 1f);
         minimumReactionSeconds = Mathf.Max(0.8f, minimumReactionSeconds);
         lateDynamicChance = Mathf.Max(earlyDynamicChance, lateDynamicChance);
+        easyObstacleSpacing = Mathf.Max(8f, easyObstacleSpacing);
+        hardObstacleSpacing = Mathf.Clamp(hardObstacleSpacing, 8f, easyObstacleSpacing);
+        hardDoubleObstacleChance = Mathf.Max(easyDoubleObstacleChance, hardDoubleObstacleChance);
+        hardLaneChangeChance = Mathf.Max(easyLaneChangeChance, hardLaneChangeChance);
     }
 }

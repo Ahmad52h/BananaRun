@@ -25,6 +25,13 @@ public class VineSwingZone : MonoBehaviour
     private Quaternion visualRotation;
     private bool motorEnabled, inputEnabled, controllerEnabled, released;
     private float elapsed, length, angle, cooldown;
+    private GameObject bananaPrefab;
+    private int bananaCount;
+    private BananaPickup[] swingBananas;
+    private BananaInventory bananaInventory;
+    private bool bananasSpawned;
+    private Vector3 previousBananaProbe;
+
     public bool IsSwinging => motor != null;
     public bool IsReleased => released;
     public Vector3 GripPosition => grip;
@@ -89,13 +96,56 @@ public class VineSwingZone : MonoBehaviour
         if (anchorLeaves != null) anchorLeaves.Play(true);
         if (whoosh != null) { whoosh.volume = 0f; whoosh.Play(); }
         UpdateGrip(0f);
+        SpawnBananaTrail();
+        previousBananaProbe = grip;
     }
 
     private void UpdateGrip(float t)
     {
+        grip = SwingPoint(t);
+    }
+
+    private Vector3 SwingPoint(float t)
+    {
         // Harmonic pendulum: zero speed at both apexes, peak speed at the bottom.
         float theta = -angle * Mathf.Cos(Mathf.PI * t);
-        grip = pivot + forward * (Mathf.Sin(theta) * length) - Vector3.up * (Mathf.Cos(theta) * length);
+        return pivot + forward * (Mathf.Sin(theta) * length) - Vector3.up * (Mathf.Cos(theta) * length);
+    }
+
+    private void SpawnBananaTrail()
+    {
+        if (bananasSpawned) return;
+        foreach (var course in FindObjectsByType<RunnerCourseGenerator>(FindObjectsSortMode.None))
+            if (course.Player == motor) { bananaPrefab = course.BananaPrefab; bananaCount = course.RopeBananaCount; break; }
+        bananaCount = Mathf.Clamp(bananaCount, 0, 24);
+        if (bananaPrefab == null || bananaCount <= 0) return;
+        bananasSpawned = true;
+        bananaInventory = motor.GetComponent<BananaInventory>();
+        swingBananas = new BananaPickup[bananaCount];
+        for (int i = 0; i < bananaCount; i++)
+        {
+            Vector3 point = SwingPoint((i + 1f) / (bananaCount + 1f));
+            var pickup = Instantiate(bananaPrefab, point, bananaPrefab.transform.rotation, transform);
+            var sphere = pickup.GetComponent<SphereCollider>();
+            if (sphere != null) pickup.transform.position += point - pickup.transform.TransformPoint(sphere.center);
+            swingBananas[i] = pickup.GetComponent<BananaPickup>();
+        }
+    }
+
+    private void CollectSwingBananas(Vector3 probe)
+    {
+        if (swingBananas == null || bananaInventory == null) return;
+        Vector3 step = probe - previousBananaProbe;
+        for (int i = 0; i < swingBananas.Length; i++)
+        {
+            var banana = swingBananas[i];
+            if (banana == null || !banana.gameObject.activeSelf) continue;
+            Vector3 center = banana.GetComponent<SphereCollider>().bounds.center;
+            float t = step.sqrMagnitude > 0.0001f ? Mathf.Clamp01(Vector3.Dot(center - previousBananaProbe, step) / step.sqrMagnitude) : 0f;
+            if ((center - (previousBananaProbe + step * t)).sqrMagnitude <= 0.85f * 0.85f)
+                banana.TryCollect(bananaInventory);
+        }
+        previousBananaProbe = probe;
     }
 
     private void Update()
@@ -131,6 +181,7 @@ public class VineSwingZone : MonoBehaviour
         visual.rotation = Quaternion.Slerp(Quaternion.identity,
             Quaternion.FromToRotation(Vector3.up, (pivot - grip).normalized), catchBlend) * visual.rotation;
         motor.transform.position += (grip - hand.TransformPoint(palmOffset)) * catchBlend;
+        CollectSwingBananas(hand.TransformPoint(palmOffset));
         if (vineLine != null)
         {
             vineLine.SetPosition(0, pivot);

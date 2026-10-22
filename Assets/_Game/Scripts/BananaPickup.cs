@@ -57,11 +57,14 @@ public class BananaPickup : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        TryCollect(other.GetComponentInParent<BananaInventory>());
+    }
+
+    // Also used by the vine while its character collider is disabled.
+    public void TryCollect(BananaInventory inventory)
+    {
         if (collected)
             return;
-
-        BananaInventory inventory =
-            other.GetComponentInParent<BananaInventory>();
 
         if (inventory == null || !inventory.isActiveAndEnabled)
             return;

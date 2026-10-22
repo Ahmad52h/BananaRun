@@ -176,11 +176,7 @@ public class RunnerHUD : MonoBehaviour
         if (health == null) return;
         if (heartsText != null) heartsText.color = health.IsProtected && !health.IsRunOver ? Color.yellow : Color.white;
         if (throwButton != null) throwButton.interactable = !resultShown && coconutThrower != null && coconutThrower.CanThrow;
-        if (health.IsRunOver && !resultShown)
-        {
-            if (health.IsDead) ShowGameOver();
-            else ShowFinishResult(true, inventory != null ? inventory.Count : 0, 0);
-        }
+        if (health.IsRunOver && health.IsDead && !resultShown) ShowGameOver();
     }
     private void OnDisable()
     {
@@ -220,17 +216,19 @@ public class RunnerHUD : MonoBehaviour
         coconutPop = null;
     }
     private void ShowGameOver() => ShowResult(false, inventory != null ? inventory.Count : 0);
-    public void ShowFinishResult(bool won, int collected, int required) => ShowResult(health != null && !health.IsDead, collected);
+    public void ShowFinishResult(bool won, int collected, int required) =>
+        ShowResult(won && collected >= required && health != null && !health.IsDead, collected, required);
 
-    private void ShowResult(bool victory, int bananas)
+    private void ShowResult(bool victory, int bananas, int required = 0)
     {
         if (resultShown || gameOverPanel == null) return;
         resultShown = true;
-        if (resultText != null) resultText.text = victory ? "VICTORY!" : "GAME OVER";
+        bool shortOnBananas = required > 0 && bananas < required && health != null && !health.IsDead;
+        if (resultText != null) resultText.text = victory ? "VICTORY!" : shortOnBananas ? "NOT ENOUGH BANANAS" : "GAME OVER";
         int score = bananas + (powers != null ? powers.BonusPoints : 0);
-        if (scoreText != null) scoreText.text = $"Bananas Collected: {bananas}" + (victory ? $"\nTotal Score: {score}" : "");
+        if (scoreText != null) scoreText.text = $"Bananas Collected: {bananas}" + (shortOnBananas ? $" / {required}" : victory ? $"\nTotal Score: {score}" : "");
         if (retryLabel != null) retryLabel.text = victory ? "PLAY AGAIN" : "RESTART";
-        if (subtitle != null) subtitle.text = victory ? "You went bananas!" : "The jungle awaits another try.";
+        if (subtitle != null) subtitle.text = victory ? "You went bananas!" : shortOnBananas ? $"Collect {required} bananas to win." : "The jungle awaits another try.";
         var emblem = card.Find("Banana Emblem"); if (emblem != null) emblem.gameObject.SetActive(!victory && bananaResultIcon != null);
         int rating = health != null ? Mathf.Clamp(health.Hearts, 1, 3) : 1;
         if (stars != null) for (int i = 0; i < stars.Length; i++)

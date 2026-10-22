@@ -7,6 +7,7 @@ public class PowerUpPickup : MonoBehaviour
     [SerializeField, Min(0f)] private float spinSpeed = 75f;
     [SerializeField] private ParticleSystem collectionEffect;
     private bool collected;
+    public PowerUpType Type => type;
 
     private void Awake()
     {

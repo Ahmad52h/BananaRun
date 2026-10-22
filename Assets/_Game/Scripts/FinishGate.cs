@@ -59,11 +59,10 @@ public class FinishGate : MonoBehaviour
         completed = true;
 
         int finalCount = inventory != null ? inventory.Count : 0;
-        bool won = true;
+        bool won = finalCount >= requiredBananas;
 
         health.EndRun();
         if (inventory != null) inventory.enabled = false;
-        if (hud != null) hud.ShowFinishResult(true, finalCount, requiredBananas);
 
         StartCoroutine(
             FinishSequence(health.transform, finalCount, won));

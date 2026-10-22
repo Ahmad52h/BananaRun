@@ -15867,6 +15867,31 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerMotor
   forwardSpeed: 10
+  maxRunSpeedMultiplier: 1.25
+  speedDifficultyCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 1
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   laneDistance: 3.3
   laneChangeSpeed: 12.5
   jumpHeight: 2.3
@@ -19295,7 +19320,7 @@ MonoBehaviour:
   flightDuration: 0.65
   arcHeight: 1.5
   launchInterval: 0.1
-  visualScale: 1
+  visualScale: 3.2
 --- !u!54 &1345076921
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -22313,6 +22338,16 @@ MonoBehaviour:
   gapEnd: 642
   minimumSpacing: 12
   maximumSpacing: 20
+  easyObstacleSpacing: 25
+  hardObstacleSpacing: 15
+  easyDoubleObstacleChance: 0.18
+  hardDoubleObstacleChance: 0.72
+  easyLaneChangeChance: 0.15
+  hardLaneChangeChance: 0.55
+  highBananaFrequency: 0.75
+  highBananaHeight: 4.7
+  highBananaCount: 9
+  ropeBananaCount: 12
   progressSource: {fileID: 473393086}
   difficultyStartDistance: 90
   maximumDifficultyDistance: 0
@@ -36369,6 +36404,64 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 202b395bdbf95cf47a986f6047829eb3, type: 3}
+--- !u!1 &2100001000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2100001001}
+  - component: {fileID: 2100001002}
+  m_Layer: 0
+  m_Name: Giant Gorilla Chaser
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2100001001
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100001000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.5, z: -5.4}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2100001002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100001000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: acdb891f8be24a77a7a60af8e4ed5761, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::GiantGorillaChaser
+  player: {fileID: 1177452967}
+  gorillaModel: {fileID: 100100000, guid: 499589f3e760373499da59c7530398e4, type: 3}
+  gorillaMaterial: {fileID: 2100000, guid: 9c7796da9d9a42bba0f1125449cf2ed0, type: 2}
+  gruntClip: {fileID: 8300000, guid: 6f8e36a3c3e60f249bee5e80fc10687a, type: 3}
+  footstepClip: {fileID: 8300000, guid: 6affc8a3723526949a6e5a8fceb285e3, type: 3}
+  normalGap: 5.4
+  closestGap: 2.5
+  hitGain: 1.25
+  recoveryPerSecond: 0.5
+  laneDelay: 0.32
+  forwardSmoothing: 0.13
+  stepDistance: 3.2
+  visualScale: 1
+  visualYaw: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -36399,3 +36492,4 @@ SceneRoots:
   - {fileID: 650114718}
   - {fileID: 891000272}
   - {fileID: 324871033}
+  - {fileID: 2100001001}

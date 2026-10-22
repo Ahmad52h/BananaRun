@@ -102,12 +102,23 @@ public class RunnerObstacle : MonoBehaviour
         return true;
     }
 
+    // The chaser only breaks obstacles intended to be breakable. It does not
+    // simulate a player collision or grant the crate's pickup rewards.
+    public bool TryBreakFromChaser()
+    {
+        if (!breakable || broken)
+            return false;
+
+        BreakObstacle(true, false);
+        return true;
+    }
+
     public void Shatter()
     {
         BreakObstacle(false);
     }
 
-    private void BreakObstacle(bool normalPlayerHit)
+    private void BreakObstacle(bool normalPlayerHit, bool spawnRewards = true)
     {
         if (broken) return;
 
@@ -147,7 +158,7 @@ public class RunnerObstacle : MonoBehaviour
         }
 
         // Spawn one collectible banana.
-        if (bananaPrefab != null &&
+        if (spawnRewards && bananaPrefab != null &&
             bananaSpawnPoint != null &&
             bananaLandingPoint != null)
         {
@@ -170,7 +181,7 @@ public class RunnerObstacle : MonoBehaviour
             pop.Initialize(target);
         }
 
-        if (coconutPrefab != null)
+        if (spawnRewards && coconutPrefab != null)
         {
             Vector3 rewardPosition = new Vector3(bounds.center.x, bounds.min.y + 0.8f, bounds.max.z + 2.4f);
             Instantiate(coconutPrefab, rewardPosition, Quaternion.identity);

@@ -5,6 +5,13 @@ public class RunnerMotor : MonoBehaviour
 {
     [Header("Running")]
     [SerializeField, Min(0f)] private float forwardSpeed = 8f;
+    [Tooltip("Maximum forward speed relative to the existing base run speed.")]
+    [SerializeField, Range(1f, 1.5f)] private float maxRunSpeedMultiplier = 1.25f;
+    [SerializeField] private AnimationCurve speedDifficultyCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+    private RunnerCourseGenerator difficultySource;
+    private bool difficultyStartupComplete;
+    private bool warnedMissingDifficultySource;
+    private bool warnedRejectedDifficultySource;
 
     [Header("Lanes")]
     [SerializeField, Min(0.1f)] private float laneDistance = 2.2f;
@@ -58,6 +65,27 @@ public class RunnerMotor : MonoBehaviour
     public float LaneDistance => laneDistance;
     public float LaneChangeDuration => laneDistance / Mathf.Max(0.01f, laneChangeSpeed);
     public float ForwardSpeed => forwardSpeed;
+    public float MaximumForwardSpeed => forwardSpeed * maxRunSpeedMultiplier;
+    public float NormalJumpHeight => jumpHeight;
+    public float HighJumpHeight => jumpHeight * gliderHeightMultiplier;
+    public float HighJumpDuration => 2f * Mathf.Sqrt(HighJumpHeight * -2f * gravity * GliderGravityScale) / (-gravity * GliderGravityScale);
+    public float SpeedAtDifficulty(float difficulty) => forwardSpeed * Mathf.Lerp(1f, maxRunSpeedMultiplier,
+        Mathf.Clamp01(speedDifficultyCurve == null ? difficulty : speedDifficultyCurve.Evaluate(Mathf.Clamp01(difficulty))));
+    public void ConfigureDifficulty(RunnerCourseGenerator source)
+    {
+        if (source == null || source.Player != this)
+        {
+            if (!warnedRejectedDifficultySource)
+            {
+                Debug.LogWarning(source == null
+                    ? "RunnerMotor rejected difficulty configuration: generator reference is missing. Keeping the current speed source."
+                    : "RunnerMotor rejected difficulty configuration: generator references another player. Keeping the current speed source.", this);
+                warnedRejectedDifficultySource = true;
+            }
+            return;
+        }
+        difficultySource = source;
+    }
     public float BaseGravity => gravity;
     public float JumpDuration => gliderJump
         ? 2f * Mathf.Sqrt(jumpHeight * gliderHeightMultiplier * -2f * gravity * GliderGravityScale) / (-gravity * GliderGravityScale)
@@ -66,9 +94,20 @@ public class RunnerMotor : MonoBehaviour
     public bool IsSliding => sliding;
     // Latch the arc through landing so an expiring pickup cannot change gravity mid-jump.
     public float EffectiveGravity => gravity * (gliderJump ? GliderGravityScale : 1f);
-    public float CurrentSpeed => forwardSpeed * (slowdownDuration > 0f
-        ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
-        : 1f);
+    public float CurrentSpeed
+    {
+        get
+        {
+            if (difficultyStartupComplete && difficultySource == null && !warnedMissingDifficultySource)
+            {
+                Debug.LogWarning("RunnerMotor has no difficulty generator; CurrentSpeed is using baseline difficulty.", this);
+                warnedMissingDifficultySource = true;
+            }
+            return SpeedAtDifficulty(difficultySource != null ? difficultySource.Difficulty : 0f) * (slowdownDuration > 0f
+                ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
+                : 1f);
+        }
+    }
 
     public void ApplySlowdown(float multiplier, float duration)
     {
@@ -90,6 +129,8 @@ public class RunnerMotor : MonoBehaviour
         centerX = transform.position.x;
         currentLane = 0;
     }
+
+    private void Start() => difficultyStartupComplete = true;
 
     private void Update()
     {
