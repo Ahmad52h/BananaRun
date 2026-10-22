@@ -36430,7 +36430,7 @@ Transform:
   m_GameObject: {fileID: 2100001000}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.5, z: -5.4}
+  m_LocalPosition: {x: 0, y: -0.5, z: -3.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -36449,11 +36449,13 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::GiantGorillaChaser
   player: {fileID: 1177452967}
-  gorillaModel: {fileID: 100100000, guid: 499589f3e760373499da59c7530398e4, type: 3}
+  gorillaModel: {fileID: 919132149155446097, guid: 6b47616dfe34b0043bb0c5fcea710e8d, type: 3}
+  gorillaAvatar: {fileID: 9000000, guid: 6b47616dfe34b0043bb0c5fcea710e8d, type: 3}
+  runController: {fileID: 9100000, guid: c607b52a095947db9743b0f0d427b854, type: 2}
   gorillaMaterial: {fileID: 2100000, guid: 9c7796da9d9a42bba0f1125449cf2ed0, type: 2}
   gruntClip: {fileID: 8300000, guid: 6f8e36a3c3e60f249bee5e80fc10687a, type: 3}
   footstepClip: {fileID: 8300000, guid: 6affc8a3723526949a6e5a8fceb285e3, type: 3}
-  normalGap: 5.4
+  normalGap: 3.5
   closestGap: 2.5
   hitGain: 1.25
   recoveryPerSecond: 0.5
