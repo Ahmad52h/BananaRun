@@ -9,6 +9,8 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private PlayerHealth health;
     [SerializeField] private TMP_Text heartsText;
     [SerializeField] private GameObject gameOverPanel;
+    [Tooltip("Pause before the GAME OVER overlay so the gorilla catch can play.")]
+    [SerializeField, Min(0f)] private float gameOverRevealDelay = 1.6f;
     [SerializeField] private CoconutThrower coconutThrower;
     [SerializeField] private UnityEngine.UI.Button throwButton;
     [SerializeField] private UnityEngine.UI.Image[] heartIcons;
@@ -23,6 +25,7 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private RectTransform coconutBadge;
     private int displayedCoconuts;
     private Coroutine coconutPop;
+    private Coroutine gameOverReveal;
     private BananaInventory inventory;
     private PowerUpManager powers;
     private UnityEngine.UI.Button retryButton;
@@ -36,6 +39,7 @@ public class RunnerHUD : MonoBehaviour
 
     private void Awake()
     {
+        ResponsiveLayout.ConfigureAllCanvasScalers();
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (health != null)
         {
@@ -176,13 +180,15 @@ public class RunnerHUD : MonoBehaviour
         if (health == null) return;
         if (heartsText != null) heartsText.color = health.IsProtected && !health.IsRunOver ? Color.yellow : Color.white;
         if (throwButton != null) throwButton.interactable = !resultShown && coconutThrower != null && coconutThrower.CanThrow;
-        if (health.IsRunOver && health.IsDead && !resultShown) ShowGameOver();
+        if (health.IsRunOver && health.IsDead && !resultShown && gameOverReveal == null) ShowGameOver();
     }
     private void OnDisable()
     {
         if (coconutThrower != null) coconutThrower.CountChanged -= UpdateCoconuts;
         if (coconutPop != null) StopCoroutine(coconutPop);
         coconutPop = null;
+        if (gameOverReveal != null) StopCoroutine(gameOverReveal);
+        gameOverReveal = null;
         if (coconutBadge != null) coconutBadge.localScale = Vector3.one;
         if (health == null) return;
         health.HeartsChanged -= UpdateHearts;
@@ -215,13 +221,36 @@ public class RunnerHUD : MonoBehaviour
         coconutBadge.localScale = Vector3.one;
         coconutPop = null;
     }
-    private void ShowGameOver() => ShowResult(false, inventory != null ? inventory.Count : 0);
+    private void ShowGameOver()
+    {
+        if (resultShown || gameOverPanel == null || gameOverReveal != null) return;
+        gameOverReveal = StartCoroutine(ShowGameOverAfterCatch());
+    }
+
+    private IEnumerator ShowGameOverAfterCatch()
+    {
+        float elapsed = 0f;
+        while (elapsed < gameOverRevealDelay)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        gameOverReveal = null;
+        if (!resultShown) ShowResult(false, inventory != null ? inventory.Count : 0);
+    }
+
     public void ShowFinishResult(bool won, int collected, int required) =>
         ShowResult(won && collected >= required && health != null && !health.IsDead, collected, required);
 
     private void ShowResult(bool victory, int bananas, int required = 0)
     {
         if (resultShown || gameOverPanel == null) return;
+        if (gameOverReveal != null)
+        {
+            StopCoroutine(gameOverReveal);
+            gameOverReveal = null;
+        }
         resultShown = true;
         bool shortOnBananas = required > 0 && bananas < required && health != null && !health.IsDead;
         if (resultText != null) resultText.text = victory ? "VICTORY!" : shortOnBananas ? "NOT ENOUGH BANANAS" : "GAME OVER";
@@ -265,6 +294,7 @@ public class RunnerHUD : MonoBehaviour
         if (restarting) return;
         restarting = true;
         if (retryButton != null) retryButton.interactable = false;
+        ReleaseCatchForRestart();
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene("Level01", LoadSceneMode.Single);
@@ -274,9 +304,16 @@ public class RunnerHUD : MonoBehaviour
         if (restarting || !Application.CanStreamedLevelBeLoaded("MainMenu")) return;
         restarting = true;
         if (homeButton != null) homeButton.interactable = false;
+        ReleaseCatchForRestart();
         Time.timeScale = 1f;
         AudioListener.pause = false;
         SceneManager.LoadScene("MainMenu", LoadSceneMode.Single);
+    }
+
+    private static void ReleaseCatchForRestart()
+    {
+        GiantGorillaChaser chaser = FindAnyObjectByType<GiantGorillaChaser>();
+        if (chaser != null) chaser.ReleaseCatch();
     }
 }
 

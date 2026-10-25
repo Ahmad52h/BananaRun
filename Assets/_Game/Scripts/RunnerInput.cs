@@ -7,8 +7,15 @@ using UnityEngine.EventSystems;
 public class RunnerInput : MonoBehaviour
 {
     [Header("Swipe")]
+    [Tooltip("Fallback swipe distance as a fraction of the screen's short edge.")]
     [SerializeField, Range(0.02f, 0.3f)]
     private float swipeThreshold = 0.08f;
+    [Tooltip("Physical swipe distance that stays consistent across phone and tablet pixel densities.")]
+    [SerializeField, Min(0.01f)]
+    private float minimumSwipeInches = 0.22f;
+    [Tooltip("Fallback density used when Screen.dpi is unavailable (for example in the editor).")]
+    [SerializeField, Min(1f)]
+    private float fallbackDpi = 320f;
 
     private RunnerMotor motor;
 
@@ -107,8 +114,7 @@ public class RunnerInput : MonoBehaviour
         Vector2 swipe =
             pointerPosition.ReadValue<Vector2>() - swipeStart;
 
-        float minimumDistance =
-            Mathf.Min(Screen.width, Screen.height) * swipeThreshold;
+        float minimumDistance = GetSwipeThresholdPixels();
 
         if (swipe.magnitude >= minimumDistance)
         {
@@ -133,6 +139,24 @@ public class RunnerInput : MonoBehaviour
         {
             trackingSwipe = false;
         }
+    }
+
+    /// <summary>
+    /// Screen-space fraction alone makes a tablet swipe physically much longer
+    /// than a phone swipe. Prefer a physical distance derived from DPI, while
+    /// keeping a clamped fraction-of-short-edge fallback for editor/unknown DPI.
+    /// </summary>
+    private float GetSwipeThresholdPixels()
+    {
+        float shortEdge = Mathf.Max(1f, Mathf.Min(Screen.width, Screen.height));
+        float fractionFallback = shortEdge * swipeThreshold;
+        float dpi = Screen.dpi > 0f ? Screen.dpi : fallbackDpi;
+        float physicalDistance = minimumSwipeInches * dpi;
+
+        return Mathf.Clamp(
+            physicalDistance,
+            fractionFallback * 0.5f,
+            fractionFallback * 1.75f);
     }
 
     private void OnApplicationFocus(bool hasFocus)

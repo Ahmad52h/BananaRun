@@ -68,7 +68,7 @@ public static class MainMenuSetup
         var canvas = new GameObject("Menu Canvas", typeof(RectTransform), typeof(Canvas), typeof(UnityEngine.UI.CanvasScaler), typeof(UnityEngine.UI.GraphicRaycaster));
         canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
         var scaler = canvas.GetComponent<UnityEngine.UI.CanvasScaler>(); scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1080,1920); scaler.matchWidthOrHeight = 0;
+        scaler.referenceResolution = new Vector2(1080,1920); scaler.matchWidthOrHeight = 0.5f;
         var safe = Rect("Safe Area", canvas.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         safe.gameObject.AddComponent<SafeAreaUI>();
         var controller = new GameObject("Main Menu Controller").AddComponent<MainMenuController>();

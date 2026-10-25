@@ -35170,18 +35170,23 @@ MonoBehaviour:
   gorillaAvatar: {fileID: 9000000, guid: d759b8a303812b24b8ebfda490f9afb7, type: 3}
   runController: {fileID: 9100000, guid: c607b52a095947db9743b0f0d427b854, type: 2}
   gorillaMaterial: {fileID: 2100000, guid: 1ea3785c7016f7840b20dec48977479e, type: 2}
-  gruntClip: {fileID: 8300000, guid: 6f8e36a3c3e60f249bee5e80fc10687a, type: 3}
+  gruntClip: {fileID: 8300000, guid: 1e8c800659c928c4db18d68edbd22ff7, type: 3}
   footstepClip: {fileID: 8300000, guid: 6affc8a3723526949a6e5a8fceb285e3, type: 3}
-  normalGap: 3.5
-  closestGap: 2.5
-  hitGain: 1.25
-  recoveryPerSecond: 0.5
   laneDelay: 0.32
   forwardSmoothing: 0.13
   stepDistance: 3.2
   visualScale: 0.8
   visualYaw: 0
   visualOffset: {x: 0.9, y: 0, z: 0}
+  startRevealGap: 2.9
+  hitRevealGap: 2.6
+  hiddenGap: 10.5
+  startRevealSeconds: 2.75
+  hitRevealSeconds: 3.5
+  revealApproachSpeed: 24
+  retreatSeconds: 1.1
+  gruntVolume: 0.8
+  footstepVolume: 0.65
 --- !u!1001 &2102764066
 PrefabInstance:
   m_ObjectHideFlags: 0

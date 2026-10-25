@@ -1,8 +1,24 @@
 using UnityEngine;
 
-/// <summary>Visual chase only: no collider, player damage, or physics body.</summary>
+/// <summary>
+/// Brief visual chase. The gorilla reveals itself when the run starts and whenever
+/// the player takes a hit, then retreats behind the camera until the next hit.
+/// It has no collider, player damage, or physics body.
+/// </summary>
 public sealed class GiantGorillaChaser : MonoBehaviour
 {
+    private enum VisibilityState
+    {
+        Hidden,
+        StartReveal,
+        HitReveal,
+        Retreating,
+        Catching
+    }
+
+    private static readonly int CatchTrigger = Animator.StringToHash("Catch");
+    private static readonly int ResetRunTrigger = Animator.StringToHash("ResetRun");
+
     [Header("References")]
     [SerializeField] private RunnerMotor player;
     [SerializeField] private GameObject gorillaModel;
@@ -13,10 +29,6 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField] private AudioClip footstepClip;
 
     [Header("Chase")]
-    [SerializeField, Min(2f)] private float normalGap = 3.5f;
-    [SerializeField, Min(1f)] private float closestGap = 2.5f;
-    [SerializeField, Min(0f)] private float hitGain = 1.25f;
-    [SerializeField, Min(0f)] private float recoveryPerSecond = 0.5f;
     [SerializeField, Min(0.01f)] private float laneDelay = 0.32f;
     [SerializeField, Min(0.01f)] private float forwardSmoothing = 0.13f;
     [SerializeField, Min(0.1f)] private float stepDistance = 3.2f;
@@ -25,21 +37,79 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [Tooltip("Local offset for the spawned visual. X shifts the gorilla out of the camera's center so the player stays visible; Y fine-tunes the auto-grounding.")]
     [SerializeField] private Vector3 visualOffset = new Vector3(1.2f, 0f, 0f);
 
+    [Header("Visibility Windows")]
+    [Tooltip("Distance behind the player when the gorilla first appears at run start.")]
+    [SerializeField, Min(2f)] private float startRevealGap = 2.9f;
+    [Tooltip("Distance behind the player when the gorilla surges in after a hit.")]
+    [SerializeField, Min(2f)] private float hitRevealGap = 2.6f;
+    [Tooltip("Distance behind the player where the gorilla is fully out of the camera frustum.")]
+    [SerializeField, Min(7.5f)] private float hiddenGap = 10.5f;
+    [SerializeField, Min(0.5f)] private float startRevealSeconds = 2.75f;
+    [SerializeField, Min(0.5f)] private float hitRevealSeconds = 3.5f;
+    [Tooltip("How quickly the gorilla closes from the hidden gap into hit-reveal range.")]
+    [SerializeField, Min(1f)] private float revealApproachSpeed = 24f;
+    [Tooltip("Time spent smoothly moving from the reveal gap back to the hidden gap.")]
+    [SerializeField, Min(0.1f)] private float retreatSeconds = 1.1f;
+
+    [Header("Game Over Catch")]
+    [Tooltip("Distance behind the player while the gorilla catches and lifts him.")]
+    [SerializeField, Range(1.1f, 1.4f)] private float catchGap = 1.2f;
+    [Tooltip("How quickly the gorilla surges into catch range on game over.")]
+    [SerializeField, Min(1f)] private float catchApproachSpeed = 30f;
+    [Tooltip("Seconds into Mutant Swiping when the active hand reaches the monkey.")]
+    [SerializeField, Min(0f)] private float catchGrabTime = 0.45f;
+    [Tooltip("Seconds into Mutant Swiping to freeze the pose at the top of the lift.")]
+    [SerializeField, Min(0f)] private float catchFreezeTime = 1.1f;
+    [Tooltip("Faster lane alignment while the gorilla is catching up to the monkey.")]
+    [SerializeField, Min(0.01f)] private float catchLaneSmoothing = 0.08f;
+    [Tooltip("Short blend so the monkey does not snap into the hand in a single frame.")]
+    [SerializeField, Min(0f)] private float catchAttachSeconds = 0.12f;
+    [Tooltip("Offset in the grabbing hand's local space. The monkey's neck is aligned to this point.")]
+    [SerializeField] private Vector3 catchHandOffset = new Vector3(0f, 0.06f, 0f);
+
+    [Header("Audio")]
+    [SerializeField, Range(0f, 1f)] private float gruntVolume = 0.8f;
+    [SerializeField, Range(0f, 1f)] private float footstepVolume = 0.65f;
+
     private readonly Collider[] obstacleHits = new Collider[24];
     private PlayerHealth health;
     private RunnerCourseGenerator generator;
     private GameObject modelInstance;
     private AudioSource voice;
     private AudioSource footsteps;
-    private float lostGap;
     private float laneVelocity;
     private float forwardVelocity;
     private float stepTravel;
     private Animator gorillaAnimator;
-    private float nextGruntTime;
     private float nextObstacleCheck;
     private bool initialized;
     private bool subscribedToHits;
+    private bool startRevealIssued;
+
+    private bool catchStarted;
+    private bool catchLocked;
+    private bool catchFrozen;
+    private bool catchPlayerMoved;
+    private bool catchWarningLogged;
+    private bool catchSuppressed;
+    private float catchStartedAt;
+    private float catchLockedAt;
+    private float lastGruntAt = -10f;
+    private Vector3 catchOriginalPlayerPosition;
+    private Quaternion catchOriginalPlayerRotation;
+    private CharacterController playerController;
+    private bool playerControllerWasEnabled;
+    private Transform playerNeck;
+    private Transform catchHand;
+
+    private VisibilityState visibility;
+    private float currentGap;
+    private float stateEndsAt;
+    private float retreatStartedAt;
+    private float retreatStartGap;
+
+    private bool IsVisibleWindow =>
+        visibility == VisibilityState.StartReveal || visibility == VisibilityState.HitReveal;
 
     private void Awake()
     {
@@ -118,17 +188,25 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
         voice = gameObject.AddComponent<AudioSource>();
         voice.playOnAwake = false;
+        voice.loop = false;
         voice.spatialBlend = 0f;
-        voice.volume = 0.55f;
-        voice.pitch = 0.7f;
+        voice.volume = gruntVolume;
+        voice.pitch = 0.8f;
         footsteps = gameObject.AddComponent<AudioSource>();
         footsteps.playOnAwake = false;
+        footsteps.loop = false;
         footsteps.spatialBlend = 0f;
-        footsteps.volume = 0.5f;
-        footsteps.pitch = 0.88f;
+        footsteps.volume = footstepVolume;
+        footsteps.pitch = 0.9f;
+        if (gruntClip == null)
+            Debug.LogWarning("GiantGorillaChaser: gruntClip is not assigned. Assign GorillaSound to the Grunt Clip field.", this);
+        if (footstepClip == null)
+            Debug.LogWarning("GiantGorillaChaser: footstepClip is not assigned. Assign GiantFootstep to the Footstep Clip field.", this);
+
+        visibility = VisibilityState.Hidden;
+        currentGap = hiddenGap;
         initialized = true;
-        ResetChase();
-        Debug.Log($"GiantGorillaChaser bound to {player.name}; spawned {renderers.Length} renderer(s) at {transform.position}.", this);
+        Debug.Log($"GiantGorillaChaser bound to {player.name}; spawned {renderers.Length} renderer(s) with grunt '{(gruntClip != null ? gruntClip.name : "MISSING")}' and footstep '{(footstepClip != null ? footstepClip.name : "MISSING")}'.", this);
         return true;
     }
 
@@ -140,7 +218,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private void OnEnable()
     {
-        if (initialized) { SubscribeToHits(); ResetChase(); }
+        if (!initialized) return;
+        SubscribeToHits();
+        BeginStartReveal();
     }
 
     private void Start()
@@ -152,23 +232,40 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             return;
         }
         SubscribeToHits();
-        gorillaAnimator.Play("Run", 0, 0f);
-        PlayGrunt();
+        if (!startRevealIssued) BeginStartReveal();
     }
 
     private void SubscribeToHits()
     {
         if (health == null || subscribedToHits) return;
         health.HitTaken += OnPlayerHit;
+        health.Died += OnPlayerDied;
         subscribedToHits = true;
     }
 
     private void LateUpdate()
     {
-        if (player == null || health == null || health.IsRunOver || !player.isActiveAndEnabled)
+        if (player == null || health == null || !player.gameObject.activeInHierarchy)
         {
-            if (voice != null) voice.Stop();
-            if (footsteps != null) footsteps.Stop();
+            StopAudio();
+            if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
+            return;
+        }
+
+        if (!health.IsDead) catchSuppressed = false;
+
+        // EndRun disables RunnerMotor before Died is raised, so the catch has to
+        // run before the normal "player is inactive" early return.
+        if (health.IsDead && !catchStarted && !catchSuppressed) BeginCatchSequence();
+        if (catchStarted)
+        {
+            UpdateCatch(Time.deltaTime);
+            return;
+        }
+
+        if (health.IsRunOver || !player.isActiveAndEnabled)
+        {
+            StopAudio();
             if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
             return;
         }
@@ -176,34 +273,373 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
 
-        float normalSpeed = player.SpeedAtDifficulty(0f);
-        // Compare against current difficulty speed, so progression itself is not a slowdown.
-        if (generator != null) normalSpeed = player.SpeedAtDifficulty(generator.Difficulty);
-        bool slowed = player.CurrentSpeed < normalSpeed * 0.95f;
-        lostGap = Mathf.MoveTowards(lostGap, 0f, recoveryPerSecond * dt);
-        float desiredGap = Mathf.Clamp(normalGap - lostGap - (slowed ? 1.1f : 0f), closestGap, normalGap);
-        Vector3 target = player.transform.position;
-        float previousZ = transform.position.z;
-        float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, laneDelay);
-        float z = Mathf.SmoothDamp(transform.position.z, target.z - desiredGap, ref forwardVelocity, forwardSmoothing);
-        transform.position = new Vector3(x, target.y, Mathf.Min(z, target.z - closestGap));
-        transform.rotation = Quaternion.identity;
-        if (gorillaAnimator != null)
-            gorillaAnimator.speed = Mathf.Clamp(player.CurrentSpeed / Mathf.Max(0.01f, player.ForwardSpeed), 0.7f, 1.4f);
+        UpdateVisibilityState(dt);
+        FollowPlayer();
 
-        stepTravel += Mathf.Max(0f, transform.position.z - previousZ);
+        if (gorillaAnimator != null)
+        {
+            if (visibility == VisibilityState.Hidden)
+            {
+                gorillaAnimator.speed = 0f;
+            }
+            else
+            {
+                float speedRatio = player.CurrentSpeed / Mathf.Max(0.01f, player.ForwardSpeed);
+                gorillaAnimator.speed = Mathf.Clamp(speedRatio, 0.7f, 1.4f);
+            }
+        }
+
+        if (!IsVisibleWindow)
+        {
+            if (footsteps != null && footsteps.isPlaying) footsteps.Stop();
+            return;
+        }
+
+        stepTravel += Mathf.Max(0f, Time.deltaTime * player.CurrentSpeed);
         if (stepTravel >= stepDistance)
         {
             stepTravel %= stepDistance;
-            if (footstepClip != null) footsteps.PlayOneShot(footstepClip);
+            if (footstepClip != null && footsteps != null) footsteps.PlayOneShot(footstepClip);
         }
 
-        if (desiredGap < normalGap - 1.5f && Time.time >= nextGruntTime) PlayGrunt();
         if (Time.time >= nextObstacleCheck)
         {
             nextObstacleCheck = Time.time + 0.08f;
-            SmashBreakablesBehindPlayer(target.z);
+            SmashBreakablesBehindPlayer(player.transform.position.z);
         }
+    }
+
+    private void UpdateVisibilityState(float dt)
+    {
+        switch (visibility)
+        {
+            case VisibilityState.StartReveal:
+            case VisibilityState.HitReveal:
+                float revealGap = visibility == VisibilityState.StartReveal ? startRevealGap : hitRevealGap;
+                currentGap = Mathf.MoveTowards(currentGap, revealGap, revealApproachSpeed * dt);
+                if (Time.time >= stateEndsAt) BeginRetreat();
+                break;
+
+            case VisibilityState.Retreating:
+                float retreatTime = Mathf.Clamp01((Time.time - retreatStartedAt) / Mathf.Max(0.01f, retreatSeconds));
+                currentGap = Mathf.Lerp(retreatStartGap, hiddenGap, Mathf.SmoothStep(0f, 1f, retreatTime));
+                if (retreatTime >= 1f)
+                {
+                    visibility = VisibilityState.Hidden;
+                    currentGap = hiddenGap;
+                }
+                break;
+
+            case VisibilityState.Hidden:
+                currentGap = hiddenGap;
+                break;
+
+            case VisibilityState.Catching:
+                currentGap = Mathf.MoveTowards(currentGap, catchGap, catchApproachSpeed * dt);
+                break;
+        }
+    }
+
+    private void FollowPlayer()
+    {
+        Vector3 target = player.transform.position;
+        float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, laneDelay);
+        float z = Mathf.SmoothDamp(transform.position.z, target.z - currentGap, ref forwardVelocity, forwardSmoothing);
+        transform.position = new Vector3(x, target.y, z);
+        transform.rotation = Quaternion.identity;
+    }
+
+    private void BeginStartReveal()
+    {
+        if (player == null) return;
+        startRevealIssued = true;
+
+        Vector3 target = player.transform.position;
+        visibility = VisibilityState.StartReveal;
+        stateEndsAt = Time.time + Mathf.Max(0.1f, startRevealSeconds);
+        currentGap = Mathf.Max(2f, startRevealGap);
+        laneVelocity = forwardVelocity = 0f;
+        stepTravel = 0f;
+        nextObstacleCheck = Time.time;
+        transform.position = new Vector3(target.x, target.y, target.z - currentGap);
+        transform.rotation = Quaternion.identity;
+        StopFootsteps();
+
+        if (gorillaAnimator != null)
+        {
+            gorillaAnimator.speed = 1f;
+            if (gorillaAnimator.isActiveAndEnabled) gorillaAnimator.Play("Run", 0, 0f);
+        }
+        PlayGrunt();
+    }
+
+    private void BeginRetreat()
+    {
+        if (visibility == VisibilityState.Hidden) return;
+        visibility = VisibilityState.Retreating;
+        retreatStartedAt = Time.time;
+        retreatStartGap = currentGap;
+        stepTravel = 0f;
+        StopFootsteps();
+    }
+
+    private void OnPlayerHit()
+    {
+        if (!initialized || player == null || health == null || health.IsRunOver) return;
+
+        bool wasOffscreen = visibility == VisibilityState.Hidden || visibility == VisibilityState.Retreating;
+        visibility = VisibilityState.HitReveal;
+        stateEndsAt = Time.time + Mathf.Max(0.1f, hitRevealSeconds);
+        stepTravel = 0f;
+        nextObstacleCheck = Time.time;
+        StopFootsteps();
+        if (wasOffscreen && gorillaAnimator != null)
+        {
+            gorillaAnimator.speed = 1f;
+            if (gorillaAnimator.isActiveAndEnabled) gorillaAnimator.Play("Run", 0, 0f);
+        }
+        PlayGrunt();
+    }
+
+    private void OnPlayerDied()
+    {
+        BeginCatchSequence();
+    }
+
+    private void BeginCatchSequence()
+    {
+        if (catchStarted || catchSuppressed || !initialized || player == null || health == null) return;
+
+        catchStarted = true;
+        catchLocked = false;
+        catchFrozen = false;
+        catchPlayerMoved = false;
+        catchWarningLogged = false;
+        catchStartedAt = Time.time;
+        catchLockedAt = 0f;
+        catchHand = null;
+        playerNeck = null;
+
+        catchOriginalPlayerPosition = player.transform.position;
+        catchOriginalPlayerRotation = player.transform.rotation;
+        playerController = player.GetComponent<CharacterController>();
+        playerControllerWasEnabled = playerController != null && playerController.enabled;
+        if (playerController != null) playerController.enabled = false;
+
+        visibility = VisibilityState.Catching;
+        laneVelocity = 0f;
+        forwardVelocity = 0f;
+        stepTravel = 0f;
+        nextObstacleCheck = Time.time;
+        StopFootsteps();
+
+        if (gorillaAnimator != null)
+        {
+            gorillaAnimator.speed = 1f;
+            if (gorillaAnimator.isActiveAndEnabled)
+            {
+                if (!gorillaAnimator.GetCurrentAnimatorStateInfo(0).IsName("Run") &&
+                    !gorillaAnimator.IsInTransition(0))
+                {
+                    gorillaAnimator.Play("Run", 0, 0f);
+                }
+                gorillaAnimator.ResetTrigger(ResetRunTrigger);
+                gorillaAnimator.SetTrigger(CatchTrigger);
+            }
+        }
+
+        // The lethal hit already fired HitTaken and played the grunt in the same
+        // frame; do not restart it. If catch is entered any other way, play it.
+        if (Time.time - lastGruntAt > 0.15f) PlayGrunt();
+        Debug.Log("GiantGorillaChaser: starting game-over catch.", this);
+    }
+
+    private void UpdateCatch(float dt)
+    {
+        if (dt <= 0f) return;
+        if (footsteps != null && footsteps.isPlaying) footsteps.Stop();
+
+        if (!catchLocked)
+        {
+            currentGap = Mathf.MoveTowards(currentGap, catchGap, catchApproachSpeed * dt);
+            FollowCatchTarget();
+            if (gorillaAnimator != null) gorillaAnimator.speed = 1f;
+
+            if (GetCatchStateTime() >= catchGrabTime) TryBeginGrab();
+            return;
+        }
+
+        if (gorillaAnimator != null && !catchFrozen) gorillaAnimator.speed = 1f;
+        AlignPlayerNeckToHand();
+
+        if (!catchFrozen && GetCatchStateTime() >= catchFreezeTime)
+        {
+            catchFrozen = true;
+            if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
+            Debug.Log("GiantGorillaChaser: holding the monkey at the top of the lift.", this);
+        }
+    }
+
+    private void FollowCatchTarget()
+    {
+        Vector3 target = player.transform.position;
+        float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, catchLaneSmoothing);
+        transform.position = new Vector3(x, target.y, target.z - currentGap);
+        transform.rotation = Quaternion.identity;
+    }
+
+    private float GetCatchStateTime()
+    {
+        if (gorillaAnimator == null) return Time.time - catchStartedAt;
+
+        AnimatorStateInfo current = gorillaAnimator.GetCurrentAnimatorStateInfo(0);
+        if (current.IsName("Catch") && current.length > 0f)
+            return Mathf.Max(0f, current.normalizedTime) * current.length;
+
+        if (gorillaAnimator.IsInTransition(0))
+        {
+            AnimatorStateInfo next = gorillaAnimator.GetNextAnimatorStateInfo(0);
+            if (next.IsName("Catch") && next.length > 0f)
+                return Mathf.Max(0f, next.normalizedTime) * next.length;
+        }
+
+        return Time.time - catchStartedAt;
+    }
+
+    private bool IsCatchStateActive()
+    {
+        if (gorillaAnimator == null) return false;
+        if (gorillaAnimator.GetCurrentAnimatorStateInfo(0).IsName("Catch")) return true;
+        return gorillaAnimator.IsInTransition(0) &&
+            gorillaAnimator.GetNextAnimatorStateInfo(0).IsName("Catch");
+    }
+
+    private void TryBeginGrab()
+    {
+        if (catchLocked || gorillaAnimator == null || !IsCatchStateActive()) return;
+
+        Transform leftHand = gorillaAnimator.GetBoneTransform(HumanBodyBones.LeftHand);
+        Transform rightHand = gorillaAnimator.GetBoneTransform(HumanBodyBones.RightHand);
+        Transform hand = SelectCatchHand(leftHand, rightHand);
+        Transform neck = ResolvePlayerNeck();
+        if (hand == null || neck == null)
+        {
+            if (!catchWarningLogged)
+            {
+                catchWarningLogged = true;
+                Debug.LogWarning("GiantGorillaChaser: could not resolve the grabbing hand or the monkey's neck.", this);
+            }
+            return;
+        }
+
+        catchHand = hand;
+        catchLocked = true;
+        catchLockedAt = Time.time;
+
+        // Make sure the gorilla is exactly in the monkey's lane when the hand
+        // closes. The visual offset is deliberately left intact so the monkey
+        // and gorilla remain readable from the chase camera.
+        Vector3 position = transform.position;
+        position.x = player.transform.position.x;
+        transform.position = position;
+
+        Debug.Log($"GiantGorillaChaser: catch locked with {hand.name} at " +
+            $"{GetCatchStateTime():F2}s.", this);
+    }
+
+    private Transform SelectCatchHand(Transform leftHand, Transform rightHand)
+    {
+        if (leftHand == null) return rightHand;
+        if (rightHand == null) return leftHand;
+
+        Transform modelRoot = modelInstance != null ? modelInstance.transform : transform;
+        Vector3 left = modelRoot.InverseTransformPoint(leftHand.position);
+        Vector3 right = modelRoot.InverseTransformPoint(rightHand.position);
+        // The swipe briefly puts both hands near the neck. The lifting hand keeps
+        // rising and sweeps out to the side, so weight height and lateral reach on
+        // top of forward reach instead of locking onto the hand that merely
+        // happens to be a centimetre ahead at this instant.
+        float leftScore = left.z + left.y * 0.5f + Mathf.Abs(left.x) * 0.5f;
+        float rightScore = right.z + right.y * 0.5f + Mathf.Abs(right.x) * 0.5f;
+        return rightScore >= leftScore ? rightHand : leftHand;
+    }
+
+    private Transform ResolvePlayerNeck()
+    {
+        if (playerNeck != null) return playerNeck;
+
+        Animator playerAnimator = player.GetComponentInChildren<Animator>(true);
+        if (playerAnimator != null && playerAnimator.isHuman)
+        {
+            playerNeck = playerAnimator.GetBoneTransform(HumanBodyBones.Neck)
+                ?? playerAnimator.GetBoneTransform(HumanBodyBones.Head);
+        }
+
+        if (playerNeck == null)
+        {
+            playerNeck = player.transform;
+            Debug.LogWarning("GiantGorillaChaser: monkey neck/head bone not found; using the player root as the grab point.", this);
+        }
+        return playerNeck;
+    }
+
+    private void AlignPlayerNeckToHand()
+    {
+        if (catchHand == null || playerNeck == null || player == null) return;
+
+        Vector3 target = catchHand.TransformPoint(catchHandOffset);
+        Vector3 delta = target - playerNeck.position;
+        float attachTime = Mathf.Clamp01((Time.time - catchLockedAt) /
+            Mathf.Max(0.01f, catchAttachSeconds));
+        float weight = Mathf.SmoothStep(0f, 1f, attachTime);
+        if (weight <= 0f) return;
+
+        player.transform.position += delta * weight;
+        catchPlayerMoved = true;
+    }
+
+    private void RestorePlayerAfterCatch()
+    {
+        if (player == null) return;
+
+        if (catchPlayerMoved)
+            player.transform.SetPositionAndRotation(catchOriginalPlayerPosition, catchOriginalPlayerRotation);
+
+        if (playerController != null) playerController.enabled = playerControllerWasEnabled;
+        catchPlayerMoved = false;
+        playerController = null;
+    }
+
+    /// <summary>Releases the monkey and returns the gorilla to Run before a restart.</summary>
+    public void ReleaseCatch()
+    {
+        if (!catchStarted && !catchLocked) return;
+
+        RestorePlayerAfterCatch();
+        catchStarted = false;
+        catchLocked = false;
+        catchFrozen = false;
+        catchWarningLogged = false;
+        catchSuppressed = true;
+        catchHand = null;
+        playerNeck = null;
+
+        if (gorillaAnimator != null)
+        {
+            gorillaAnimator.speed = 1f;
+            if (gorillaAnimator.isActiveAndEnabled)
+            {
+                gorillaAnimator.ResetTrigger(CatchTrigger);
+                gorillaAnimator.SetTrigger(ResetRunTrigger);
+            }
+        }
+
+        visibility = VisibilityState.Hidden;
+        currentGap = hiddenGap;
+        stepTravel = 0f;
+        laneVelocity = forwardVelocity = 0f;
+        StopAudio();
+        Debug.Log("GiantGorillaChaser: released the monkey and returned to Run.", this);
     }
 
     private void SmashBreakablesBehindPlayer(float playerZ)
@@ -220,45 +656,50 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         }
     }
 
-    private void OnPlayerHit()
-    {
-        lostGap = Mathf.Min(normalGap - closestGap, lostGap + hitGain);
-        PlayGrunt();
-    }
-
     private void PlayGrunt()
     {
-        if (voice != null && gruntClip != null) voice.PlayOneShot(gruntClip);
-        nextGruntTime = Time.time + 4f;
+        if (voice == null || gruntClip == null) return;
+        lastGruntAt = Time.time;
+        voice.Stop();
+        voice.PlayOneShot(gruntClip);
     }
 
-    private void ResetChase()
+    private void StopFootsteps()
     {
-        if (player == null) return;
-        lostGap = laneVelocity = forwardVelocity = stepTravel = 0f;
-        nextObstacleCheck = Time.time;
-        nextGruntTime = Time.time;
-        transform.position = player.transform.position + Vector3.back * normalGap;
-        transform.rotation = Quaternion.identity;
-        if (voice != null) voice.Stop();
         if (footsteps != null) footsteps.Stop();
-        if (gorillaAnimator != null)
-        {
-            gorillaAnimator.speed = 1f;
-            // OnDisable runs while the spawned visual is already inactive. Playing a
-            // state on an inactive Animator logs an error, so only replay it when live.
-            if (gorillaAnimator.isActiveAndEnabled)
-                gorillaAnimator.Play("Run", 0, 0f);
-        }
+    }
+
+    private void StopAudio()
+    {
+        if (voice != null) voice.Stop();
+        StopFootsteps();
     }
 
     private void OnDisable()
     {
-        if (health != null && subscribedToHits) health.HitTaken -= OnPlayerHit;
+        if (health != null && subscribedToHits)
+        {
+            health.HitTaken -= OnPlayerHit;
+            health.Died -= OnPlayerDied;
+        }
         subscribedToHits = false;
-        if (voice != null) voice.Stop();
-        if (footsteps != null) footsteps.Stop();
-        if (initialized) ResetChase();
-    }
 
+        bool wasCatching = catchStarted;
+        if (wasCatching) RestorePlayerAfterCatch();
+        catchStarted = false;
+        catchLocked = false;
+        catchFrozen = false;
+        catchWarningLogged = false;
+        if (wasCatching) catchSuppressed = true;
+        catchHand = null;
+        playerNeck = null;
+
+        StopAudio();
+        if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
+        visibility = VisibilityState.Hidden;
+        currentGap = hiddenGap;
+        stepTravel = 0f;
+        laneVelocity = forwardVelocity = 0f;
+        startRevealIssued = false;
+    }
 }

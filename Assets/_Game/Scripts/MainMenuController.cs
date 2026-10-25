@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -10,10 +11,21 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private CanvasGroup fade;
     [SerializeField] private UnityEngine.UI.Button playButton;
     private bool loading;
+    private ResponsiveMenuContent responsiveMenu;
+
+    private void Awake()
+    {
+        ResponsiveLayout.ConfigureAllCanvasScalers();
+
+        SafeAreaUI safeArea = FindAnyObjectByType<SafeAreaUI>();
+        if (safeArea != null)
+            responsiveMenu = new ResponsiveMenuContent((RectTransform)safeArea.transform);
+    }
 
     private void Start()
     {
         Time.timeScale = 1f;
+        responsiveMenu?.Apply();
         if (monkey != null)
         {
             monkey.applyRootMotion = false;
@@ -21,6 +33,11 @@ public sealed class MainMenuController : MonoBehaviour
             for (int i = 1; i < monkey.layerCount; i++) monkey.SetLayerWeight(i, 0f);
         }
         StartCoroutine(FadeIn());
+    }
+
+    private void Update()
+    {
+        responsiveMenu?.ApplyIfNeeded();
     }
 
     private IEnumerator FadeIn()
@@ -48,5 +65,110 @@ public sealed class MainMenuController : MonoBehaviour
         { fade.alpha = t / 0.25f; yield return null; }
         fade.alpha = 1f;
         yield return SceneManager.LoadSceneAsync("Level01");
+    }
+}
+
+/// <summary>
+/// Keeps the authored main-menu content inside the safe area on tall phones.
+/// Full-screen modal backdrops are left untouched so they still cover the
+/// entire display; only the actual menu items shrink.
+/// </summary>
+public sealed class ResponsiveMenuContent
+{
+    private const float ReferenceWidth = 1080f;
+    private const float MinimumScale = 0.72f;
+
+    private readonly RectTransform root;
+    private readonly List<Entry> entries = new List<Entry>();
+    private float lastWidth = -1f;
+
+    private struct Entry
+    {
+        public RectTransform rect;
+        public MenuButtonFeedback feedback;
+        public Vector3 baseScale;
+    }
+
+    public ResponsiveMenuContent(RectTransform root)
+    {
+        this.root = root;
+        CaptureChildren();
+    }
+
+    public void ApplyIfNeeded()
+    {
+        if (root == null)
+            return;
+
+        float width = root.rect.width;
+        if (width <= 1f || Mathf.Abs(width - lastWidth) < 0.5f)
+            return;
+
+        Apply(width);
+    }
+
+    public void Apply()
+    {
+        if (root != null)
+            Apply(root.rect.width);
+    }
+
+    private void Apply(float width)
+    {
+        if (root == null || width <= 1f)
+            return;
+
+        if (entries.Count == 0)
+            CaptureChildren();
+        if (entries.Count == 0)
+            return;
+
+        float scale = Mathf.Clamp(width / ReferenceWidth, MinimumScale, 1f);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            Entry entry = entries[i];
+            if (entry.rect == null)
+                continue;
+
+            if (entry.feedback != null)
+            {
+                // MenuButtonFeedback owns the button scale so its press/breathe
+                // animation keeps working; give it the responsive multiplier.
+                entry.feedback.ContentScale = scale;
+            }
+            else
+            {
+                entry.rect.localScale = entry.baseScale * scale;
+            }
+        }
+
+        lastWidth = width;
+    }
+
+    private void CaptureChildren()
+    {
+        entries.Clear();
+        if (root == null)
+            return;
+
+        for (int i = 0; i < root.childCount; i++)
+        {
+            RectTransform child = root.GetChild(i) as RectTransform;
+            if (child == null || IsFullStretch(child))
+                continue;
+
+            entries.Add(new Entry
+            {
+                rect = child,
+                feedback = child.GetComponent<MenuButtonFeedback>(),
+                baseScale = child.localScale
+            });
+        }
+    }
+
+    private static bool IsFullStretch(RectTransform rect)
+    {
+        return rect.anchorMin.x <= 0.001f && rect.anchorMax.x >= 0.999f &&
+               rect.anchorMin.y <= 0.001f && rect.anchorMax.y >= 0.999f;
     }
 }

@@ -7,11 +7,20 @@ public sealed class MenuButtonFeedback : MonoBehaviour, IPointerDownHandler, IPo
     [SerializeField] private bool breathe;
     private bool pressed;
     private UnityEngine.UI.Button button;
-    private void Awake() { button = GetComponent<UnityEngine.UI.Button>(); }
+    private Vector3 baseScale = Vector3.one;
+    public float ContentScale { get; set; } = 1f;
+    private void Awake()
+    {
+        button = GetComponent<UnityEngine.UI.Button>();
+        baseScale = transform.localScale;
+    }
     private void Update()
     {
         float target = pressed ? 0.95f : breathe && button.interactable ? 1f + 0.018f * Mathf.Sin(Time.unscaledTime * 2.2f) : 1f;
-        transform.localScale = Vector3.Lerp(transform.localScale, Vector3.one * target, 18f * Time.unscaledDeltaTime);
+        transform.localScale = Vector3.Lerp(
+            transform.localScale,
+            baseScale * ContentScale * target,
+            18f * Time.unscaledDeltaTime);
     }
     public void OnPointerDown(PointerEventData data)
     {
@@ -21,5 +30,9 @@ public sealed class MenuButtonFeedback : MonoBehaviour, IPointerDownHandler, IPo
     }
     public void OnPointerUp(PointerEventData data) { pressed = false; }
     public void OnPointerExit(PointerEventData data) { pressed = false; }
-    private void OnDisable() { pressed = false; transform.localScale = Vector3.one; }
+    private void OnDisable()
+    {
+        pressed = false;
+        transform.localScale = baseScale * ContentScale;
+    }
 }
