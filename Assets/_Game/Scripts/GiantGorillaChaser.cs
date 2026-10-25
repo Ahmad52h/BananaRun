@@ -22,6 +22,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField, Min(0.1f)] private float stepDistance = 3.2f;
     [SerializeField, Min(0.1f)] private float visualScale = 1f;
     [SerializeField] private float visualYaw;
+    [Tooltip("Local offset for the spawned visual. X shifts the gorilla out of the camera's center so the player stays visible; Y fine-tunes the auto-grounding.")]
+    [SerializeField] private Vector3 visualOffset = new Vector3(1.2f, 0f, 0f);
 
     private readonly Collider[] obstacleHits = new Collider[24];
     private PlayerHealth health;
@@ -72,7 +74,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         foreach (Camera camera in modelInstance.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
         gorillaAnimator = modelInstance.GetComponentInChildren<Animator>(true);
         if (gorillaAnimator == null) gorillaAnimator = modelInstance.AddComponent<Animator>();
-        if (gorillaAnimator.avatar == null && gorillaAvatar != null)
+        if (gorillaAvatar != null && gorillaAvatar.isValid &&
+            (gorillaAnimator.avatar == null || !gorillaAnimator.avatar.isValid || gorillaAnimator.avatar != gorillaAvatar))
         {
             gorillaAnimator.avatar = gorillaAvatar;
             gorillaAnimator.Rebind();
@@ -94,8 +97,22 @@ public sealed class GiantGorillaChaser : MonoBehaviour
                 renderer.sharedMaterials = materials;
             }
         }
-        if (renderers.Length == 0)
+        if (renderers.Length > 0)
+        {
+            // FBX pivots are usually at the hips, so zeroing the local position buries the
+            // legs. Ground the lowest rendered point at the chaser root (the player's feet).
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            float groundOffset = transform.position.y - bounds.min.y;
+            modelInstance.transform.localPosition = new Vector3(
+                visualOffset.x, groundOffset + visualOffset.y, visualOffset.z);
+            Debug.Log($"GiantGorillaChaser grounded the gorilla visual by {groundOffset:F2}m and offset it by {visualOffset.x:F2}m on X.", this);
+        }
+        else
+        {
+            modelInstance.transform.localPosition = visualOffset;
             Debug.LogWarning("GiantGorillaChaser spawned the model, but it has no Renderer components.", this);
+        }
         if (gorillaAnimator.avatar == null)
             Debug.LogWarning("GiantGorillaChaser: the gorilla Animator has no Avatar; the Run clip will not retarget.", this);
 
