@@ -15,8 +15,6 @@ public sealed class MainMenuController : MonoBehaviour
 
     private void Awake()
     {
-        ResponsiveLayout.ConfigureAllCanvasScalers();
-
         SafeAreaUI safeArea = FindAnyObjectByType<SafeAreaUI>();
         if (safeArea != null)
             responsiveMenu = new ResponsiveMenuContent((RectTransform)safeArea.transform);
@@ -37,7 +35,9 @@ public sealed class MainMenuController : MonoBehaviour
 
     private void Update()
     {
-        responsiveMenu?.ApplyIfNeeded();
+        // Do not touch UI layout while the scene transition is in flight.
+        if (!loading)
+            responsiveMenu?.ApplyIfNeeded();
     }
 
     private IEnumerator FadeIn()
@@ -58,13 +58,19 @@ public sealed class MainMenuController : MonoBehaviour
     private IEnumerator LoadLevel()
     {
         loading = true;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
         playButton.interactable = false;
         fade.blocksRaycasts = true;
         SettingsPanelController.Save();
         for (float t = 0; t < 0.25f; t += Time.unscaledDeltaTime)
         { fade.alpha = t / 0.25f; yield return null; }
         fade.alpha = 1f;
-        yield return SceneManager.LoadSceneAsync("Level01");
+
+        // LoadSceneAsync is cooperative; yield its operation instead of
+        // spinning or doing synchronous scene setup here.
+        yield return null;
+        yield return SceneManager.LoadSceneAsync("Level01", LoadSceneMode.Single);
     }
 }
 
@@ -81,6 +87,8 @@ public sealed class ResponsiveMenuContent
     private readonly RectTransform root;
     private readonly List<Entry> entries = new List<Entry>();
     private float lastWidth = -1f;
+    private float lastScale = -1f;
+    private bool _isApplying;
 
     private struct Entry
     {
@@ -97,7 +105,7 @@ public sealed class ResponsiveMenuContent
 
     public void ApplyIfNeeded()
     {
-        if (root == null)
+        if (_isApplying || root == null)
             return;
 
         float width = root.rect.width;
@@ -109,40 +117,58 @@ public sealed class ResponsiveMenuContent
 
     public void Apply()
     {
-        if (root != null)
-            Apply(root.rect.width);
+        if (_isApplying || root == null)
+            return;
+
+        Apply(root.rect.width);
     }
 
     private void Apply(float width)
     {
-        if (root == null || width <= 1f)
+        if (_isApplying || root == null || width <= 1f)
             return;
 
-        if (entries.Count == 0)
-            CaptureChildren();
-        if (entries.Count == 0)
-            return;
-
-        float scale = Mathf.Clamp(width / ReferenceWidth, MinimumScale, 1f);
-        for (int i = 0; i < entries.Count; i++)
+        _isApplying = true;
+        try
         {
-            Entry entry = entries[i];
-            if (entry.rect == null)
-                continue;
+            if (entries.Count == 0)
+                CaptureChildren();
+            if (entries.Count == 0)
+                return;
 
-            if (entry.feedback != null)
+            float scale = Mathf.Clamp(width / ReferenceWidth, MinimumScale, 1f);
+            bool scaleChanged = !Mathf.Approximately(lastScale, scale);
+            if (scaleChanged)
             {
-                // MenuButtonFeedback owns the button scale so its press/breathe
-                // animation keeps working; give it the responsive multiplier.
-                entry.feedback.ContentScale = scale;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    Entry entry = entries[i];
+                    if (entry.rect == null)
+                        continue;
+
+                    if (entry.feedback != null)
+                    {
+                        // MenuButtonFeedback owns the button scale so its press/breathe
+                        // animation keeps working; give it the responsive multiplier.
+                        entry.feedback.ContentScale = scale;
+                    }
+                    else
+                    {
+                        entry.rect.localScale = entry.baseScale * scale;
+                    }
+                }
+
+                lastScale = scale;
             }
-            else
-            {
-                entry.rect.localScale = entry.baseScale * scale;
-            }
+
+            // Remember the width even when the clamped scale is unchanged so a
+            // resize within the same clamp bucket does not dirty layout again.
+            lastWidth = width;
         }
-
-        lastWidth = width;
+        finally
+        {
+            _isApplying = false;
+        }
     }
 
     private void CaptureChildren()

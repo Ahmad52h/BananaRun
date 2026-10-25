@@ -39,7 +39,9 @@ public class RunnerHUD : MonoBehaviour
 
     private void Awake()
     {
-        ResponsiveLayout.ConfigureAllCanvasScalers();
+        // CanvasScaler configuration is owned by ResponsiveLayout's single
+        // scene-load hook. Reapplying it here dirtied the Canvas during the
+        // scene transition and could retrigger layout callbacks.
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
         if (health != null)
         {
