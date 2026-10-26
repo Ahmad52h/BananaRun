@@ -20,6 +20,7 @@ public class RunnerHUD : MonoBehaviour
     [Header("Tropical Results")]
     [SerializeField] private Sprite roundedPanelSprite;
     [SerializeField] private Sprite bananaResultIcon;
+    [SerializeField] private AudioClip victorySound;
     [Header("Coconut Inventory")]
     [SerializeField] private TMP_Text coconutCountText;
     [SerializeField] private RectTransform coconutBadge;
@@ -266,6 +267,7 @@ public class RunnerHUD : MonoBehaviour
         {
             stars[i].gameObject.SetActive(victory);
             stars[i].color = i < rating ? new Color(1f, 0.8f, 0.12f) : new Color(0.24f, 0.32f, 0.25f);
+            stars[i].rectTransform.localScale = victory ? Vector3.zero : Vector3.one;
         }
         gameOverPanel.transform.SetAsLastSibling();
         gameOverPanel.SetActive(true);
@@ -285,11 +287,34 @@ public class RunnerHUD : MonoBehaviour
             yield return null;
         }
         resultGroup.alpha = 1; card.localScale = Vector3.one; resultGroup.interactable = true;
+        if (stars != null && stars[0].gameObject.activeSelf)
+        {
+            RunnerAudio.Instance?.PlayVictory(victorySound);
+            for (int i = 0; i < stars.Length; i++) StartCoroutine(PopVictoryStar(stars[i].rectTransform, i * 0.14f));
+        }
         if (retryButton != null)
         {
             retryButton.interactable = true;
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(retryButton.gameObject);
         }
+    }
+    private IEnumerator PopVictoryStar(RectTransform star, float delay)
+    {
+        float elapsed = 0f;
+        while (elapsed < delay) { elapsed += Time.unscaledDeltaTime; yield return null; }
+        elapsed = 0f;
+        const float duration = 0.26f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float scale = t < 0.65f
+                ? Mathf.SmoothStep(0f, 1.18f, t / 0.65f)
+                : Mathf.SmoothStep(1.18f, 1f, (t - 0.65f) / 0.35f);
+            star.localScale = Vector3.one * scale;
+            yield return null;
+        }
+        star.localScale = Vector3.one;
     }
     public void Retry()
     {

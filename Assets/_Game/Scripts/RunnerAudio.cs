@@ -14,6 +14,7 @@ public class RunnerAudio : MonoBehaviour
     [Header("Mix")]
     [SerializeField, Range(0f, 1f)] private float musicVolume = 0.22f;
     [SerializeField, Range(0f, 1f)] private float bananaVolume = 0.65f;
+    [SerializeField, Range(0f, 1f)] private float victoryVolume = 0.65f;
     [SerializeField] private bool playMusicOnStart = true;
     [SerializeField] private AudioSource musicSource;
     [SerializeField] private AudioSource effectsSource;
@@ -95,6 +96,13 @@ public class RunnerAudio : MonoBehaviour
         // Separate voice avoids changing the pitch of an overlapping banana combo.
         hurtSource.pitch = 1f;
         hurtSource.PlayOneShot(monkeyHurt, Mathf.Min(hurtVolume, 0.38f));
+    }
+
+    public void PlayVictory(AudioClip clip)
+    {
+        if (!isActiveAndEnabled || effectsSource == null || clip == null) return;
+        effectsSource.pitch = 1f;
+        effectsSource.PlayOneShot(clip, victoryVolume);
     }
 
     private void OnValidate()
