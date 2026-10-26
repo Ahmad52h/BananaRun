@@ -10,6 +10,7 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject characterPanel;
     [SerializeField] private CanvasGroup fade;
     [SerializeField] private UnityEngine.UI.Button playButton;
+    [SerializeField] private CharacterSelector characterSelector;
     private bool loading;
     private ResponsiveMenuContent responsiveMenu;
 
@@ -51,8 +52,17 @@ public sealed class MainMenuController : MonoBehaviour
 
     public void OpenSettings() { if (!loading) settingsPanel.SetActive(true); }
     public void CloseSettings() { settingsPanel.SetActive(false); SettingsPanelController.Save(); }
-    public void OpenCharacter() { if (!loading) characterPanel.SetActive(true); }
-    public void CloseCharacter() { characterPanel.SetActive(false); }
+    public void OpenCharacter()
+    {
+        if (loading) return;
+        characterPanel.SetActive(true);
+        if (characterSelector != null) characterSelector.SetPreviewVisible(true);
+    }
+    public void CloseCharacter()
+    {
+        if (characterSelector != null) characterSelector.SetPreviewVisible(false);
+        characterPanel.SetActive(false);
+    }
     public void Play() { if (!loading) StartCoroutine(LoadLevel()); }
 
     private IEnumerator LoadLevel()

@@ -21,6 +21,9 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private Sprite roundedPanelSprite;
     [SerializeField] private Sprite bananaResultIcon;
     [SerializeField] private AudioClip victorySound;
+    [SerializeField] private AudioClip gameOverSound;
+    [SerializeField] private AudioSource gameOverSource;
+    [SerializeField, Range(0f, 1f)] private float gameOverVolume = 0.6f;
     [Header("Coconut Inventory")]
     [SerializeField] private TMP_Text coconutCountText;
     [SerializeField] private RectTransform coconutBadge;
@@ -44,6 +47,10 @@ public class RunnerHUD : MonoBehaviour
         // scene-load hook. Reapplying it here dirtied the Canvas during the
         // scene transition and could retrigger layout callbacks.
         if (health == null) health = FindAnyObjectByType<PlayerHealth>();
+        if (gameOverSource == null) gameOverSource = gameObject.AddComponent<AudioSource>();
+        gameOverSource.playOnAwake = false;
+        gameOverSource.loop = false;
+        gameOverSource.spatialBlend = 0f;
         if (health != null)
         {
             inventory = health.GetComponent<BananaInventory>();
@@ -255,6 +262,14 @@ public class RunnerHUD : MonoBehaviour
             gameOverReveal = null;
         }
         resultShown = true;
+        if (!victory && gameOverSound != null)
+        {
+            gameOverSource.Stop();
+            gameOverSource.clip = gameOverSound;
+            gameOverSource.pitch = 1f;
+            gameOverSource.volume = gameOverVolume;
+            gameOverSource.Play();
+        }
         bool shortOnBananas = required > 0 && bananas < required && health != null && !health.IsDead;
         if (resultText != null) resultText.text = victory ? "VICTORY!" : shortOnBananas ? "NOT ENOUGH BANANAS" : "GAME OVER";
         int score = bananas + (powers != null ? powers.BonusPoints : 0);

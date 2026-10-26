@@ -15698,6 +15698,7 @@ GameObject:
   - component: {fileID: 1177452971}
   - component: {fileID: 1177452972}
   - component: {fileID: 1177452973}
+  - component: {fileID: 1177452974}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -16542,6 +16543,34 @@ MonoBehaviour:
   leanAngle: 20
   turnAngle: 12
   animationTime: 0.25
+--- !u!114 &1177452974
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1177452963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0813b21365f80d643aa88af8dde6f396, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterSelector
+  characters:
+  - displayName: Default Monkey
+    accessoryPrefab: {fileID: 0}
+    headOffset: {x: 0, y: 0.39, z: 0.08}
+    headRotation: {x: 0, y: 0, z: 0}
+    accessoryScale: {x: 1, y: 1, z: 1}
+  - displayName: Hat Monkey
+    accessoryPrefab: {fileID: 5461922435137332780, guid: 48d42348871ad9347b227eb06fe1eafa, type: 3}
+    headOffset: {x: 0, y: 0.39, z: 0.08}
+    headRotation: {x: 0, y: 0, z: 0}
+    accessoryScale: {x: 1, y: 1, z: 1}
+  characterAnimator: {fileID: 1422272301}
+  previewAnimator: {fileID: 0}
+  previewCamera: {fileID: 0}
+  nameLabel: {fileID: 0}
+  statusLabel: {fileID: 0}
 --- !u!1001 &1178081653
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -24050,6 +24079,7 @@ GameObject:
   - component: {fileID: 1696252881}
   - component: {fileID: 1696252880}
   - component: {fileID: 1696252884}
+  - component: {fileID: 1696252885}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -24169,8 +24199,108 @@ MonoBehaviour:
   roundedPanelSprite: {fileID: 21300000, guid: 0709fa7231ade6548a32714844ff05e3, type: 2}
   bananaResultIcon: {fileID: 21300000, guid: bb529b2b10cdf084dae60c8bd6f260f1, type: 3}
   victorySound: {fileID: 8300000, guid: 63c0fcc736a296241b87d40eca9e2b33, type: 3}
+  gameOverSound: {fileID: 8300000, guid: c47d8e159f476824592008f6d705d7b7, type: 3}
+  gameOverSource: {fileID: 1696252885}
+  gameOverVolume: 0.6
   coconutCountText: {fileID: 1481636465}
   coconutBadge: {fileID: 788783695}
+--- !u!82 &1696252885
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1696252879}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 0.6
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1001 &1697851693
 PrefabInstance:
   m_ObjectHideFlags: 0
