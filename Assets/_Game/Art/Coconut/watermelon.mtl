@@ -1,0 +1,17 @@
+newmtl yellow
+Kd 0.91 0.80 0.42
+
+newmtl brownDarkest
+Kd 0.27 0.16 0.12
+
+newmtl green
+Kd 0.31 0.62 0.28
+
+newmtl red
+Kd 0.88 0.29 0.27
+
+newmtl greenDark
+Kd 0.17 0.42 0.22
+
+newmtl brown
+Kd 0.52 0.31 0.20

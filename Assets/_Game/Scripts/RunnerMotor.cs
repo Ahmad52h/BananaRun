@@ -42,6 +42,8 @@ public class RunnerMotor : MonoBehaviour
     private float slowdownDuration;
     private float slowdownMultiplier = 1f;
     private PowerUpManager powerUps;
+    private PlayerDustEffects dustEffects;
+    private RunnerAnimation runnerAnimation;
     
     // حفظ الأبعاد الأصلية للكوليدر
     private float standingHeight;
@@ -120,6 +122,9 @@ public class RunnerMotor : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         powerUps = GetComponent<PowerUpManager>();
+        runnerAnimation = GetComponent<RunnerAnimation>();
+        dustEffects = GetComponent<PlayerDustEffects>();
+        if (dustEffects == null) dustEffects = gameObject.AddComponent<PlayerDustEffects>();
         
         standingHeight = controller.height;
         standingCenter = controller.center;
@@ -177,6 +182,9 @@ public class RunnerMotor : MonoBehaviour
         {
             verticalVelocity = 0f;
         }
+
+        dustEffects.SetRunning(controller.isGrounded && !sliding &&
+            movement.z > 0f && (runnerAnimation == null || !runnerAnimation.IsVineControlled));
     }
 
     public void ChangeLane(int direction)
@@ -208,6 +216,8 @@ public class RunnerMotor : MonoBehaviour
         gliderJump = powerUps != null && powerUps.IsActive(PowerUpType.Glider);
         verticalVelocity = Mathf.Sqrt(jumpHeight * (gliderJump ? gliderHeightMultiplier : 1f)
             * -2f * gravity * (gliderJump ? GliderGravityScale : 1f));
+        dustEffects.SetRunning(false);
+        dustEffects.EmitJump();
     }
 
     public bool Slide()
@@ -244,6 +254,7 @@ public class RunnerMotor : MonoBehaviour
 
     private void OnDisable()
     {
+        if (dustEffects != null) dustEffects.SetRunning(false);
         if (sliding && controller != null) EndSlide();
     }
 

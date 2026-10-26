@@ -104,13 +104,14 @@ public static class PowerSystemsVerification
                         "The path and collision surface have a real river gap.");
                     var audio = RunnerAudio.Instance;
                     audio.PlayBananaCollect();
-                    Check(Mathf.Abs(audio.LastBananaPitch - 1f) < 0.001f, "First banana chime starts at 1.0x pitch.");
+                    Check(audio.LastBananaPitch >= 0.9f && audio.LastBananaPitch <= 1.1f,
+                        "First banana pickup pitch stays within the natural variation range.");
                     audio.PlayBananaCollect();
-                    Check(Mathf.Abs(audio.LastBananaPitch - 1.125f) < 0.002f && audio.BananaCombo == 2,
-                        "Consecutive banana chime rises to the second scale step.");
+                    Check(audio.LastBananaPitch >= 0.9f && audio.LastBananaPitch <= 1.1f && audio.BananaCombo == 2,
+                        "Consecutive banana pickup keeps combo tracking and pitch variation.");
                     for (int i = 0; i < 8; i++) audio.PlayBananaCollect();
-                    Check(Mathf.Abs(audio.LastBananaPitch - 2f) < 0.001f,
-                        "Banana chime caps at the octave's 2.0x pitch.");
+                    Check(audio.LastBananaPitch >= 0.9f && audio.LastBananaPitch <= 1.1f,
+                        "Repeated pickups never reach harsh high pitches.");
                     var bananaPrefab = AssetDatabase.LoadAssetAtPath<BananaPickup>("Assets/_Game/Prefabs/Banana.prefab");
                     Check(new SerializedObject(bananaPrefab).FindProperty("pickupEffectPrefab").objectReferenceValue != null,
                         "Banana pickup has its golden sparkle particle prefab assigned.");
@@ -119,8 +120,9 @@ public static class PowerSystemsVerification
                 case 1:
                     if (elapsed < 1.3f) return;
                     RunnerAudio.Instance.PlayBananaCollect();
-                    Check(RunnerAudio.Instance.BananaCombo == 1 && Mathf.Abs(RunnerAudio.Instance.LastBananaPitch - 1f) < 0.001f,
-                        "Chime combo resets after the timer lapses.");
+                    Check(RunnerAudio.Instance.BananaCombo == 1 && RunnerAudio.Instance.LastBananaPitch >= 0.9f &&
+                        RunnerAudio.Instance.LastBananaPitch <= 1.1f,
+                        "Pickup combo resets after the timer lapses while pitch stays balanced.");
                     powers.Activate(PowerUpType.Bulldozer);
                     previousHearts = health.Hearts;
                     previousPoints = powers.BonusPoints;

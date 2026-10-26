@@ -25,6 +25,7 @@ public class PlayerHealth : MonoBehaviour
     private RunnerMotor motor;
     private RunnerInput runnerInput;
     private PowerUpManager powerUps;
+    private DamageFlashUI damageFlash;
 
     private void Awake()
     {
@@ -33,6 +34,7 @@ public class PlayerHealth : MonoBehaviour
         motor = GetComponent<RunnerMotor>();
         runnerInput = GetComponent<RunnerInput>();
         powerUps = GetComponent<PowerUpManager>();
+        damageFlash = DamageFlashUI.GetOrCreate();
     }
 
     public void TakeHit()
@@ -42,6 +44,8 @@ public class PlayerHealth : MonoBehaviour
 
         Hearts--;
         protectionEndsAt = Time.time + protectionDuration;
+        if (damageFlash == null) damageFlash = DamageFlashUI.GetOrCreate();
+        damageFlash?.TriggerDamageFlash();
         RunnerAudio.Instance?.PlayHurt();
         HitTaken?.Invoke();
 

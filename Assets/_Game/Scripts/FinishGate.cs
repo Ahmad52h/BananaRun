@@ -26,8 +26,8 @@ public class FinishGate : MonoBehaviour
     [SerializeField, Min(0.01f)]
     private float launchInterval = 0.1f;
 
-    [SerializeField, Min(0.01f)]
-    private float visualScale = 1f;
+    // Matches the longest dimension of Banana.prefab's visible model.
+    private const float DeliveryBananaScale = 1.33f;
 
     private bool completed;
     public bool Completed => completed;
@@ -141,7 +141,7 @@ public class FinishGate : MonoBehaviour
 
                         visuals[i] = banana.transform;
                         scales[i] =
-                            visuals[i].localScale * visualScale;
+                            visuals[i].localScale * DeliveryBananaScale;
                     }
 
                     Vector3 position =

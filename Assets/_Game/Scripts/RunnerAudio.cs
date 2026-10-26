@@ -9,7 +9,7 @@ public class RunnerAudio : MonoBehaviour
     [SerializeField] private AudioClip backgroundMusic;
     [SerializeField] private AudioClip bananaCollect;
     [SerializeField] private AudioClip monkeyHurt;
-    [SerializeField, Range(0f, 1f)] private float hurtVolume = 0.6f;
+    [SerializeField, Range(0f, 0.4f)] private float hurtVolume = 0.38f;
     private AudioSource hurtSource;
     [Header("Mix")]
     [SerializeField, Range(0f, 1f)] private float musicVolume = 0.22f;
@@ -17,12 +17,13 @@ public class RunnerAudio : MonoBehaviour
     [SerializeField] private bool playMusicOnStart = true;
     [SerializeField] private AudioSource musicSource;
     [SerializeField] private AudioSource effectsSource;
-    [Header("Musical Banana Combo")]
+    [Header("Banana Combo")]
     [SerializeField, Min(0.1f)] private float comboResetSeconds = 1.2f;
-    [SerializeField] private float[] bananaPitchScale = { 1f, 1.125f, 1.25f, 1.333f, 1.5f, 1.667f, 1.875f, 2f };
 
     private int bananaCombo;
     private float lastBananaTime = float.NegativeInfinity;
+    private float lastPickupSoundAt = float.NegativeInfinity;
+    private float lastHurtSoundAt = float.NegativeInfinity;
     public int BananaCombo => bananaCombo;
     public float LastBananaPitch { get; private set; } = 1f;
 
@@ -60,6 +61,7 @@ public class RunnerAudio : MonoBehaviour
     {
         if (musicSource == null || backgroundMusic == null) return;
         musicSource.clip = backgroundMusic;
+        musicSource.pitch = 1f;
         ApplySettings();
         musicSource.Play();
     }
@@ -70,18 +72,29 @@ public class RunnerAudio : MonoBehaviour
         if (!isActiveAndEnabled || effectsSource == null || clip == null) return;
         bananaCombo = Time.time - lastBananaTime <= comboResetSeconds ? bananaCombo + 1 : 1;
         lastBananaTime = Time.time;
-        int index = Mathf.Min(bananaCombo - 1, bananaPitchScale == null ? 0 : bananaPitchScale.Length - 1);
-        LastBananaPitch = bananaPitchScale != null && bananaPitchScale.Length > 0
-            ? Mathf.Clamp(bananaPitchScale[index], 0.5f, 2f) : 1f;
-        effectsSource.pitch = LastBananaPitch;
-        effectsSource.PlayOneShot(clip, bananaVolume);
+        LastBananaPitch = PlayRandomizedEffect(effectsSource, clip, bananaVolume,
+            ref lastPickupSoundAt, 0.06f);
+    }
+
+    private float PlayRandomizedEffect(AudioSource source, AudioClip clip, float volume,
+        ref float lastPlayedAt, float cooldown)
+    {
+        if (!isActiveAndEnabled || source == null || clip == null) return 1f;
+        if (Time.unscaledTime - lastPlayedAt < cooldown) return source.pitch;
+        lastPlayedAt = Time.unscaledTime;
+        source.pitch = Random.Range(0.9f, 1.1f);
+        source.PlayOneShot(clip, volume);
+        return source.pitch;
     }
 
     public void PlayHurt()
     {
         if (!isActiveAndEnabled || hurtSource == null || monkeyHurt == null) return;
+        if (Time.unscaledTime - lastHurtSoundAt < 0.15f) return;
+        lastHurtSoundAt = Time.unscaledTime;
         // Separate voice avoids changing the pitch of an overlapping banana combo.
-        hurtSource.PlayOneShot(monkeyHurt, hurtVolume);
+        hurtSource.pitch = 1f;
+        hurtSource.PlayOneShot(monkeyHurt, Mathf.Min(hurtVolume, 0.38f));
     }
 
     private void OnValidate()

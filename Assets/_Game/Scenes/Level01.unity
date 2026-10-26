@@ -4967,6 +4967,10 @@ MonoBehaviour:
   horizontalSmoothTime: 0.1
   verticalSmoothTime: 0.12
   jumpFramingDeadZone: 0.65
+  referenceAspect: 0.5625
+  minimumResponsiveFov: 50
+  maximumResponsiveFov: 82
+  giantFovBoost: 6
   giantFov: 75
   giantOffset: {x: 0, y: 1.2, z: -3.5}
   heavyStep: {fileID: 8300000, guid: 6affc8a3723526949a6e5a8fceb285e3, type: 3}
@@ -8976,7 +8980,6 @@ GameObject:
   - component: {fileID: 643796009}
   - component: {fileID: 643796008}
   - component: {fileID: 643796007}
-  - component: {fileID: 643796011}
   m_Layer: 0
   m_Name: Vine Swing Trigger
   m_TagString: Untagged
@@ -9137,7 +9140,6 @@ MonoBehaviour:
   flightDuration: 1.5
   restingVine: {fileID: 315805953}
   anchorLeaves: {fileID: 1771190670}
-  whoosh: {fileID: 643796011}
   palmOffset: {x: 0, y: 0.06, z: 0}
 --- !u!54 &643796009
 Rigidbody:
@@ -9187,103 +9189,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 11, y: 4, z: 5}
   m_Center: {x: 0, y: 1.5, z: 0}
---- !u!82 &643796011
-AudioSource:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 643796005}
-  m_Enabled: 1
-  serializedVersion: 4
-  OutputAudioMixerGroup: {fileID: 0}
-  m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: 44ea523644ba6ef429fdb6e65b426efe, type: 3}
-  m_PlayOnAwake: 0
-  m_Volume: 1
-  m_Pitch: 1
-  Loop: 1
-  Mute: 0
-  Spatialize: 0
-  SpatializePostEffects: 0
-  Priority: 128
-  DopplerLevel: 1
-  MinDistance: 1
-  MaxDistance: 500
-  Pan2D: 0
-  rolloffMode: 0
-  BypassEffects: 0
-  BypassListenerEffects: 0
-  BypassReverbZones: 0
-  rolloffCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    - serializedVersion: 3
-      time: 1
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  panLevelCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  spreadCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  reverbZoneMixCustomCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0.33333334
-      outWeight: 0.33333334
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
 --- !u!1 &650114717
 GameObject:
   m_ObjectHideFlags: 0
@@ -15854,6 +15759,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RunnerInput
   swipeThreshold: 0.08
+  minimumSwipeInches: 0.22
+  fallbackDpi: 320
 --- !u!114 &1177452967
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19320,7 +19227,6 @@ MonoBehaviour:
   flightDuration: 0.65
   arcHeight: 1.5
   launchInterval: 0.1
-  visualScale: 3.2
 --- !u!54 &1345076921
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -24250,6 +24156,7 @@ MonoBehaviour:
   health: {fileID: 1177452969}
   heartsText: {fileID: 1595011774}
   gameOverPanel: {fileID: 440197948}
+  gameOverRevealDelay: 1.6
   coconutThrower: {fileID: 1177452970}
   throwButton: {fileID: 226067387}
   heartIcons:
@@ -31423,22 +31330,13 @@ MonoBehaviour:
   backgroundMusic: {fileID: 8300000, guid: 39ba35a4673b4984aa90c086da1b66c6, type: 3}
   bananaCollect: {fileID: 8300000, guid: 0989ea56bc4c7734ab81cb445700af3e, type: 3}
   monkeyHurt: {fileID: 8300000, guid: 6f8e36a3c3e60f249bee5e80fc10687a, type: 3}
-  hurtVolume: 0.6
+  hurtVolume: 0.38
   musicVolume: 0.012
   bananaVolume: 0.65
   playMusicOnStart: 1
   musicSource: {fileID: 1849558470}
   effectsSource: {fileID: 1849558469}
   comboResetSeconds: 1.2
-  bananaPitchScale:
-  - 1
-  - 1.125
-  - 1.25
-  - 1.333
-  - 1.5
-  - 1.667
-  - 1.875
-  - 2
 --- !u!4 &1849558472
 Transform:
   m_ObjectHideFlags: 0
@@ -35185,6 +35083,13 @@ MonoBehaviour:
   hitRevealSeconds: 3.5
   revealApproachSpeed: 24
   retreatSeconds: 1.1
+  catchGap: 1.2
+  catchApproachSpeed: 30
+  catchGrabTime: 0.45
+  catchFreezeTime: 1.1
+  catchLaneSmoothing: 0.08
+  catchAttachSeconds: 0.12
+  catchHandOffset: {x: 0, y: 0, z: 0}
   gruntVolume: 0.8
   footstepVolume: 0.65
 --- !u!1001 &2102764066

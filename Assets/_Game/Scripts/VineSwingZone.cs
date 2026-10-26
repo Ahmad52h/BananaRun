@@ -12,7 +12,6 @@ public class VineSwingZone : MonoBehaviour
     [SerializeField, Min(0.5f)] private float flightDuration = 1.5f;
     [SerializeField] private Transform restingVine;
     [SerializeField] private ParticleSystem anchorLeaves;
-    [SerializeField] private AudioSource whoosh;
     [SerializeField] private Vector3 palmOffset = new Vector3(0, 0.06f, 0);
 
     private RunnerMotor motor;
@@ -94,7 +93,6 @@ public class VineSwingZone : MonoBehaviour
         if (restingVine != null) restingVine.gameObject.SetActive(false);
         if (vineLine != null) vineLine.enabled = true;
         if (anchorLeaves != null) anchorLeaves.Play(true);
-        if (whoosh != null) { whoosh.volume = 0f; whoosh.Play(); }
         UpdateGrip(0f);
         SpawnBananaTrail();
         previousBananaProbe = grip;
@@ -157,11 +155,6 @@ public class VineSwingZone : MonoBehaviour
         {
             float t = Mathf.Clamp01(elapsed / swingDuration);
             UpdateGrip(t);
-            if (whoosh != null)
-            {
-                whoosh.volume = Mathf.Sin(t * Mathf.PI) * 0.7f;
-                whoosh.pitch = 0.85f + Mathf.Sin(t * Mathf.PI) * 0.4f;
-            }
         }
         else
         {
@@ -194,7 +187,6 @@ public class VineSwingZone : MonoBehaviour
         // Deliberate push-off at the forward apex; gravity solves the safe landing.
         launchVelocity = (end - flightStart) / flightDuration - Vector3.up * (0.5f * motor.BaseGravity * flightDuration);
         animationDriver.ReleaseVine(flightDuration);
-        if (whoosh != null) whoosh.Stop();
     }
 
     private void Restore(bool landed)
@@ -215,7 +207,6 @@ public class VineSwingZone : MonoBehaviour
         cooldown = Time.time + 1f;
         if (vineLine != null) vineLine.enabled = false;
         if (restingVine != null) restingVine.gameObject.SetActive(true);
-        if (whoosh != null) whoosh.Stop();
     }
 
     private void OnDisable() => Restore(false);

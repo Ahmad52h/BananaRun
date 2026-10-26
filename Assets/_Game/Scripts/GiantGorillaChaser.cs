@@ -190,13 +190,13 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         voice.playOnAwake = false;
         voice.loop = false;
         voice.spatialBlend = 0f;
-        voice.volume = gruntVolume;
+        voice.volume = Mathf.Min(gruntVolume, 0.4f);
         voice.pitch = 0.8f;
         footsteps = gameObject.AddComponent<AudioSource>();
         footsteps.playOnAwake = false;
         footsteps.loop = false;
         footsteps.spatialBlend = 0f;
-        footsteps.volume = footstepVolume;
+        footsteps.volume = Mathf.Min(footstepVolume, 0.4f);
         footsteps.pitch = 0.9f;
         if (gruntClip == null)
             Debug.LogWarning("GiantGorillaChaser: gruntClip is not assigned. Assign GorillaSound to the Grunt Clip field.", this);
