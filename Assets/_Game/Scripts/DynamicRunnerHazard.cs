@@ -7,7 +7,9 @@ public class DynamicRunnerHazard : MonoBehaviour
     {
         Bird,
         Warthog,
-        Boulder
+        Boulder,
+        RollingLog,
+        Barrier
     }
 
     [SerializeField] private Motion motion;
@@ -31,6 +33,8 @@ public class DynamicRunnerHazard : MonoBehaviour
 
     private Rigidbody body;
     private RunnerMotor player;
+    private RivalRunner rival;
+    private PlayerHealth playerHealth;
 
     private Vector3 origin;
     private Vector3 visualOrigin;
@@ -45,6 +49,7 @@ public class DynamicRunnerHazard : MonoBehaviour
     public float DistanceTravelled => travelled;
     public float TravelLimit => travelLimit;
     public RunnerMotor TargetPlayer => player;
+    public RivalRunner TargetRival => rival;
 
     public float EffectiveSpeed =>
         speed *
@@ -57,12 +62,21 @@ public class DynamicRunnerHazard : MonoBehaviour
         RunnerCourseGenerator course)
     {
         player = runner;
+        BindCompetitors();
 
         difficultyOwner =
             course != null &&
             course.Player == runner
                 ? course
                 : null;
+    }
+
+    private void BindCompetitors()
+    {
+        playerHealth = player != null ? player.GetComponent<PlayerHealth>() : null;
+        rival = null;
+        foreach (var competitor in FindObjectsByType<RivalRunner>(FindObjectsSortMode.None))
+            if (competitor.Player == player) { rival = competitor; break; }
     }
 
     private void Awake()
@@ -85,6 +99,7 @@ public class DynamicRunnerHazard : MonoBehaviour
         if (runners.Length == 1)
         {
             player = runners[0];
+            BindCompetitors();
         }
 
         if (visual != null)
@@ -142,12 +157,12 @@ public class DynamicRunnerHazard : MonoBehaviour
         if (player == null)
             return;
 
-        float distance =
-            origin.z - player.transform.position.z;
-
-        if (distance > activationDistance ||
-            distance < -12f ||
-            !player.enabled)
+        float playerDistance = origin.z - player.transform.position.z;
+        float rivalDistance = rival != null ? origin.z - rival.transform.position.z : float.PositiveInfinity;
+        bool playerApproaching = player.enabled && playerDistance <= activationDistance && playerDistance >= -12f;
+        bool rivalApproaching = rival != null && rival.isActiveAndEnabled && !rival.HasFinished &&
+            rivalDistance <= activationDistance && rivalDistance >= -12f;
+        if ((playerHealth != null && playerHealth.IsRunOver) || (!playerApproaching && !rivalApproaching))
         {
             if (rumble != null)
                 rumble.Stop();
@@ -193,7 +208,7 @@ public class DynamicRunnerHazard : MonoBehaviour
         if (visual == null)
             return;
 
-        if (motion == Motion.Boulder)
+        if (motion == Motion.Boulder || motion == Motion.RollingLog)
         {
             visual.Rotate(
                 Vector3.left,
@@ -220,7 +235,7 @@ public class DynamicRunnerHazard : MonoBehaviour
                     Mathf.Sin(age * 1.6f) * 7f
                 );
         }
-        else
+        else if (motion == Motion.Warthog)
         {
             // Warthog / crocodile style movement.
             visual.localPosition =

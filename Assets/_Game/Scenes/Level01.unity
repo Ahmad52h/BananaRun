@@ -22361,7 +22361,7 @@ MonoBehaviour:
   finishApproach: 25
   groundHeight: -0.3
   seed: 731
-  randomizeEachRun: 0
+  randomizeEachRun: 1
   obstaclePrefabs:
   - {fileID: 4189928716869979129, guid: db4278cfc7e87c344bfcd819b95051aa, type: 3}
   - {fileID: 8836587874632717363, guid: 1ac8768583ffd2947b8257baa03db2f0, type: 3}
@@ -22373,6 +22373,8 @@ MonoBehaviour:
   - {fileID: 6798654818187811407, guid: fb72c82aaf73c87469d1aee67e02a12f, type: 3}
   - {fileID: 4113416124919653315, guid: 3047f375143f15c4aaf8a0f448e2e533, type: 3}
   - {fileID: 824699816705700701, guid: d6f02107fd3df9b41ba311c7c8fc4630, type: 3}
+  - {fileID: 196096778557076882, guid: 3336578e098b59a4a8e17a3b10a55d0b, type: 3}
+  - {fileID: 3171603052625888510, guid: b1275c3d8b2424947ae481c56d17dff6, type: 3}
   bananaPrefab: {fileID: 695452153143438817, guid: 78ed7ffb130f8444d814ef15623a4d2c, type: 3}
   coconutPrefab: {fileID: 3907034381106976745, guid: a0fca79b70f0ec64c9a454de8dff8e98, type: 3}
   powerUpPrefabs:
@@ -22385,12 +22387,14 @@ MonoBehaviour:
   gapEnd: 642
   minimumSpacing: 12
   maximumSpacing: 20
-  easyObstacleSpacing: 25
-  hardObstacleSpacing: 15
-  easyDoubleObstacleChance: 0.18
-  hardDoubleObstacleChance: 0.72
-  easyLaneChangeChance: 0.15
-  hardLaneChangeChance: 0.55
+  easyObstacleSpacing: 18
+  hardObstacleSpacing: 12
+  easyDoubleObstacleChance: 0.5
+  hardDoubleObstacleChance: 0.92
+  easyLaneChangeChance: 0.3
+  hardLaneChangeChance: 0.6
+  easyStaggerChance: 0.2
+  hardStaggerChance: 0.7
   highBananaFrequency: 0.75
   highBananaHeight: 4.7
   highBananaCount: 9
@@ -22398,12 +22402,12 @@ MonoBehaviour:
   progressSource: {fileID: 473393086}
   difficultyStartDistance: 90
   maximumDifficultyDistance: 0
-  obstacleFrequencyMultiplier: 1.18
-  maxHazardSpeedMultiplier: 1.15
+  obstacleFrequencyMultiplier: 1.28
+  maxHazardSpeedMultiplier: 1.22
   powerUpFrequencyMultiplier: 0.85
-  earlyDynamicChance: 0.1
-  lateDynamicChance: 0.38
-  minimumReactionSeconds: 1.1
+  earlyDynamicChance: 0.22
+  lateDynamicChance: 0.6
+  minimumReactionSeconds: 0.95
   powerUpSpacing: 120
   sceneryPrefabs:
   - {fileID: 875607934879135939, guid: 6162c1a5c630f0e4a879b9801a612448, type: 3}

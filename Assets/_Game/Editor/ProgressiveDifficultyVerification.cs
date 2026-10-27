@@ -300,8 +300,8 @@ public static class ProgressiveDifficultyVerification
                     if (i % 25 == 0) WriteReport("Speed at " + i + "%: " + speed.ToString("F3") + "\n");
                 }
                 Check(Mathf.Abs(last - motor.MaximumForwardSpeed) < 0.001f, "Smooth speed reaches its cap at the finish.");
-                Check(course.ReactionDistance / motor.MaximumForwardSpeed >= 1.1f + motor.LaneChangeDuration - 0.001f,
-                    "Maximum-speed transitions reserve reaction time plus a complete lane change.");
+                Check(course.ReactionDistance / motor.MaximumForwardSpeed >= 0.95f + motor.LaneChangeDuration - 0.001f,
+                    "Maximum-speed transitions reserve at least 0.95 seconds of reaction time plus a complete lane change.");
                 Audit(course);
                 foreach (var range in new[] { new Vector2(0f, 0.35f), new Vector2(0.35f, 0.7f), new Vector2(0.7f, 1.01f) })
                 {
