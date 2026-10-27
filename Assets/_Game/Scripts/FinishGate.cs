@@ -8,6 +8,12 @@ public class FinishGate : MonoBehaviour
     [SerializeField, Min(1)]
     private int requiredBananas = 6;
 
+    [Header("Banana Basket Quota")]
+    [Tooltip("Show a basket goal in the HUD and award 1-3 stars based on bananas delivered.")]
+    [SerializeField] private bool enableBananaQuota = true;
+    [Tooltip("Bananas needed to fill the celebration basket; never lower than Required Bananas.")]
+    [SerializeField, Min(1)] private int targetBananasForBasket = 20;
+
     [SerializeField] private RunnerHUD hud;
 
     [Header("Banana Delivery")]
@@ -31,6 +37,14 @@ public class FinishGate : MonoBehaviour
 
     private bool completed;
     public bool Completed => completed;
+    public bool BananaQuotaEnabled => enableBananaQuota;
+    public int BananaBasketTarget => Mathf.Max(requiredBananas, targetBananasForBasket);
+    public Transform BananaTarget => bananaTarget;
+
+    private void OnValidate()
+    {
+        targetBananasForBasket = Mathf.Max(requiredBananas, targetBananasForBasket);
+    }
 
     private void Awake()
     {
@@ -64,12 +78,14 @@ public class FinishGate : MonoBehaviour
         health.EndRun();
         if (inventory != null) inventory.enabled = false;
 
-        StartCoroutine(
-            FinishSequence(health.transform, finalCount, won));
+        StartCoroutine(FinishSequence(
+            health.transform, finalCount, won,
+            enableBananaQuota, BananaBasketTarget));
     }
 
     private IEnumerator FinishSequence(
-        Transform player, int finalCount, bool won)
+        Transform player, int finalCount, bool won,
+        bool quotaEnabled, int quotaTarget)
     {
         if (finalCount > 0 &&
             bananaDeliveryVisual != null &&
@@ -81,7 +97,7 @@ public class FinishGate : MonoBehaviour
         yield return new WaitForSecondsRealtime(0.3f);
 
         if (hud != null) hud.ShowFinishResult(
-            won, finalCount, requiredBananas);
+            won, finalCount, requiredBananas, quotaEnabled, quotaTarget);
     }
 
     private IEnumerator DeliverBananas(

@@ -250,10 +250,16 @@ public class RunnerHUD : MonoBehaviour
         if (!resultShown) ShowResult(false, inventory != null ? inventory.Count : 0);
     }
 
-    public void ShowFinishResult(bool won, int collected, int required) =>
-        ShowResult(won && collected >= required && health != null && !health.IsDead, collected, required);
+    public void ShowFinishResult(
+        bool won, int collected, int required,
+        bool quotaEnabled = false, int quotaTarget = 0) =>
+        ShowResult(
+            won && collected >= required && health != null && !health.IsDead,
+            collected, required, quotaEnabled, quotaTarget);
 
-    private void ShowResult(bool victory, int bananas, int required = 0)
+    private void ShowResult(
+        bool victory, int bananas, int required = 0,
+        bool quotaEnabled = false, int quotaTarget = 0)
     {
         if (resultShown || gameOverPanel == null) return;
         if (gameOverReveal != null)
@@ -271,13 +277,45 @@ public class RunnerHUD : MonoBehaviour
             gameOverSource.Play();
         }
         bool shortOnBananas = required > 0 && bananas < required && health != null && !health.IsDead;
-        if (resultText != null) resultText.text = victory ? "VICTORY!" : shortOnBananas ? "NOT ENOUGH BANANAS" : "GAME OVER";
+        bool quotaActive = quotaEnabled && quotaTarget > 0;
+        bool goalComplete = quotaActive && bananas >= quotaTarget;
+        if (resultText != null)
+        {
+            if (victory && goalComplete) resultText.text = "GOAL COMPLETE!";
+            else if (victory) resultText.text = quotaActive ? "NICE RUN!" : "VICTORY!";
+            else resultText.text = shortOnBananas ? "NOT ENOUGH BANANAS" : "GAME OVER";
+        }
         int score = bananas + (powers != null ? powers.BonusPoints : 0);
-        if (scoreText != null) scoreText.text = $"Bananas Collected: {bananas}" + (shortOnBananas ? $" / {required}" : victory ? $"\nTotal Score: {score}" : "");
+        if (scoreText != null)
+        {
+            if (quotaActive)
+            {
+                scoreText.text = $"Bananas in Basket: {bananas} / {quotaTarget}";
+                if (victory) scoreText.text += $"\nTotal Score: {score}";
+            }
+            else
+            {
+                scoreText.text = $"Bananas Collected: {bananas}" +
+                    (shortOnBananas ? $" / {required}" : victory ? $"\nTotal Score: {score}" : "");
+            }
+        }
         if (retryLabel != null) retryLabel.text = victory ? "PLAY AGAIN" : "RESTART";
-        if (subtitle != null) subtitle.text = victory ? "You went bananas!" : shortOnBananas ? $"Collect {required} bananas to win." : "The jungle awaits another try.";
+        if (subtitle != null)
+        {
+            if (victory && goalComplete) subtitle.text = "The celebration basket is full!";
+            else if (shortOnBananas) subtitle.text = $"Collect {required} bananas to win.";
+            else if (victory && quotaActive) subtitle.text =
+                $"{Mathf.Max(0, quotaTarget - bananas)} more bananas for a full basket.";
+            else subtitle.text = victory ? "You went bananas!" : "The jungle awaits another try.";
+        }
         var emblem = card.Find("Banana Emblem"); if (emblem != null) emblem.gameObject.SetActive(!victory && bananaResultIcon != null);
-        int rating = health != null ? Mathf.Clamp(health.Hearts, 1, 3) : 1;
+        int rating = 1;
+        if (quotaActive)
+        {
+            if (goalComplete) rating = 3;
+            else if (bananas * 5 >= quotaTarget * 3) rating = 2;
+        }
+        else if (health != null) rating = Mathf.Clamp(health.Hearts, 1, 3);
         if (stars != null) for (int i = 0; i < stars.Length; i++)
         {
             stars[i].gameObject.SetActive(victory);

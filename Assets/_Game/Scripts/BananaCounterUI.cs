@@ -12,6 +12,14 @@ public class BananaCounterUI : MonoBehaviour
     private Coroutine iconPunch;
     private Vector3 iconRestScale;
     private int displayedCount;
+    private FinishGate finishGate;
+    private bool quotaInitialized;
+    private bool quotaEnabled;
+    private int quotaTarget;
+    private bool originalAutoSize;
+    private float originalFontSize;
+    private float originalFontSizeMin;
+    private float originalFontSizeMax;
 
     private void Awake()
     {
@@ -22,6 +30,14 @@ public class BananaCounterUI : MonoBehaviour
             if (sibling != null) bananaIcon = sibling as RectTransform;
         }
         if (bananaIcon != null) iconRestScale = bananaIcon.localScale;
+        if (label != null)
+        {
+            originalAutoSize = label.enableAutoSizing;
+            originalFontSize = label.fontSize;
+            originalFontSizeMin = label.fontSizeMin;
+            originalFontSizeMax = label.fontSizeMax;
+        }
+        finishGate = FindAnyObjectByType<FinishGate>();
     }
 
     private void OnEnable()
@@ -38,7 +54,55 @@ public class BananaCounterUI : MonoBehaviour
 
         displayedCount = inventory.Count;
         inventory.CountChanged += Refresh;
-        label.text = displayedCount.ToString();
+        SyncQuota(true);
+    }
+
+    private void Update()
+    {
+        SyncQuota(false);
+    }
+
+    private void SyncQuota(bool force)
+    {
+        if (finishGate == null) finishGate = FindAnyObjectByType<FinishGate>();
+        bool enabled = finishGate != null && finishGate.BananaQuotaEnabled;
+        int target = finishGate != null ? finishGate.BananaBasketTarget : 0;
+        if (!force && quotaInitialized && enabled == quotaEnabled && target == quotaTarget)
+            return;
+
+        quotaInitialized = true;
+        quotaEnabled = enabled;
+        quotaTarget = target;
+        ApplyQuotaStyle(enabled);
+        if (label != null && inventory != null)
+            label.text = FormatCount(inventory.Count);
+    }
+
+    private void ApplyQuotaStyle(bool enabled)
+    {
+        if (label == null) return;
+        if (enabled)
+        {
+            // "12 / 20" is wider than the baseline count, so let TMP shrink it
+            // to fit the existing badge without changing the scene layout.
+            label.enableAutoSizing = true;
+            label.fontSizeMin = Mathf.Min(originalFontSize, 20f);
+            label.fontSizeMax = Mathf.Max(originalFontSize, 24f);
+        }
+        else
+        {
+            label.enableAutoSizing = originalAutoSize;
+            label.fontSize = originalFontSize;
+            label.fontSizeMin = originalFontSizeMin;
+            label.fontSizeMax = originalFontSizeMax;
+        }
+    }
+
+    private string FormatCount(int count)
+    {
+        return quotaEnabled && quotaTarget > 0
+            ? $"{count} / {quotaTarget}"
+            : count.ToString();
     }
 
     private void OnDisable()
@@ -54,7 +118,7 @@ public class BananaCounterUI : MonoBehaviour
 
     private void Refresh(int count)
     {
-        label.text = count.ToString();
+        label.text = FormatCount(count);
         if (count > displayedCount && bananaIcon != null)
         {
             if (iconPunch != null) StopCoroutine(iconPunch);
