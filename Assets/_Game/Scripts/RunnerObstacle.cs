@@ -24,6 +24,8 @@ public class RunnerObstacle : MonoBehaviour
 
     private bool touched;
     private bool broken;
+    public bool CanSlideUnder => canSlideUnder;
+    public bool CanBreakFromProjectile => breakable && !broken;
     public bool BreaksOnPlayerHit => breakOnPlayerHit &&
         GetComponentInParent<DynamicRunnerHazard>(true) == null &&
         GetComponentInChildren<DynamicRunnerHazard>(true) == null &&
@@ -57,6 +59,8 @@ public class RunnerObstacle : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (GetComponentInParent<FallingCoconutHazard>() != null ||
+            GetComponentInParent<BallisticRivalProjectile>() != null || GetComponentInParent<CoconutProjectile>() != null) return;
         if (broken)
             return;
 
@@ -86,7 +90,7 @@ public class RunnerObstacle : MonoBehaviour
         if (normalImpact && health.IsProtected) return;
         touched = true;
         int previousHearts = health.Hearts;
-        health.TakeHit();
+        health.TakeObstacleHit();
         if (normalImpact && health.Hearts < previousHearts)
             BreakObstacle(true);
     }

@@ -37,6 +37,10 @@ public class FinishGate : MonoBehaviour
 
     private bool completed;
     public bool Completed => completed;
+    public int RequiredBananas => requiredBananas;
+    public int PlayerDeliveredBananas { get; private set; }
+    public int RivalDeliveredBananas { get; private set; }
+    public bool RivalDelivered { get; private set; }
     public bool BananaQuotaEnabled => enableBananaQuota;
     public int BananaBasketTarget => Mathf.Max(requiredBananas, targetBananasForBasket);
     public Transform BananaTarget => bananaTarget;
@@ -58,6 +62,12 @@ public class FinishGate : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        var rival = other.GetComponentInParent<RivalRunner>();
+        if (rival != null)
+        {
+            ReceiveRival(rival);
+            return;
+        }
         if (completed)
             return;
 
@@ -73,14 +83,41 @@ public class FinishGate : MonoBehaviour
         completed = true;
 
         int finalCount = inventory != null ? inventory.Count : 0;
+        PlayerDeliveredBananas = finalCount;
         bool won = finalCount >= requiredBananas;
+        var race = FindAnyObjectByType<RaceProgressTracker>();
+        if (race != null && race.Player == health.GetComponent<RunnerMotor>())
+        {
+            race.RecordPlayerFinish();
+            won = race.PlayerWonBasketRace;
+        }
 
+        if (!won)
+        {
+            health.FailRun(PlayerHealth.FailureCause.NotEnoughBananas);
+            if (inventory != null) inventory.enabled = false;
+            return;
+        }
         health.EndRun();
         if (inventory != null) inventory.enabled = false;
 
         StartCoroutine(FinishSequence(
             health.transform, finalCount, won,
             enableBananaQuota, BananaBasketTarget));
+    }
+
+    public void ReceiveRival(RivalRunner rival)
+    {
+        if (RivalDelivered || rival == null) return;
+        RivalDelivered = true;
+        rival.FinishRace();
+        RivalDeliveredBananas = rival.BananaCount;
+        var race = FindAnyObjectByType<RaceProgressTracker>();
+        if (race != null) race.RecordRivalFinish(rival);
+        var inventory = rival.GetComponent<BananaInventory>();
+        if (inventory != null) inventory.enabled = false;
+        if (RivalDeliveredBananas > 0 && bananaDeliveryVisual != null && bananaTarget != null)
+            StartCoroutine(DeliverBananas(rival.transform, RivalDeliveredBananas));
     }
 
     private IEnumerator FinishSequence(
@@ -96,8 +133,14 @@ public class FinishGate : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(0.3f);
 
-        if (hud != null) hud.ShowFinishResult(
-            won, finalCount, requiredBananas, quotaEnabled, quotaTarget);
+        if (hud != null)
+        {
+            var race = FindAnyObjectByType<RaceProgressTracker>();
+            if (race != null)
+                hud.ShowCompetitiveFinishResult(won, finalCount, RivalDeliveredBananas,
+                    requiredBananas, quotaEnabled, quotaTarget);
+            else hud.ShowFinishResult(won, finalCount, requiredBananas, quotaEnabled, quotaTarget);
+        }
     }
 
     private IEnumerator DeliverBananas(

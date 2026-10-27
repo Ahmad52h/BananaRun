@@ -3,6 +3,8 @@ using UnityEngine;
 public class RunnerCamera : MonoBehaviour
 {
     [SerializeField] private Transform target;
+    [Tooltip("Optional nearby competitor to frame alongside the player during a direct race.")]
+    [SerializeField] private Transform raceRival;
     [SerializeField] private Vector3 offset = new Vector3(0f, 5f, -8f);
     [Header("Optional Level Feel")]
     [Tooltip("Subtle Dutch roll on lane changes plus a speed-based FOV lift. Disable for the original camera feel.")]
@@ -165,6 +167,11 @@ public class RunnerCamera : MonoBehaviour
         shakeAge += dt;
         float impulse = Mathf.Exp(-20f * shakeAge) * Mathf.Sin(shakeAge * 65f) * shakeStrength * giantBlend;
         float targetX = trackCenterX + offset.x + (target.position.x - trackCenterX) * horizontalFollow;
+        float raceWeight = raceRival != null ?
+            (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(4f, 12f,
+                Mathf.Abs(raceRival.position.z - target.position.z)))) * (1f - giantBlend) * (1f - approachBlend) : 0f;
+        if (raceRival != null)
+            targetX = Mathf.Lerp(targetX, (target.position.x + raceRival.position.x) * 0.5f + offset.x, raceWeight);
         smoothX = Mathf.SmoothDamp(smoothX, targetX, ref horizontalVelocity, horizontalSmoothTime);
         Vector3 extra = giantOffset * giantBlend;
         float desiredLift = motor != null && motor.IsGliderJump
@@ -186,6 +193,8 @@ public class RunnerCamera : MonoBehaviour
             float dynamicFov = 0f;
             if (enableDynamicCameraTilt) dynamicFov += speedFov;
             if (enableApproachZoom) dynamicFov += approachFovOffset * approachBlend;
+            if (raceRival != null)
+                dynamicFov += raceWeight * Mathf.Min(10f, Mathf.Abs(raceRival.position.x - target.position.x) * 2f);
             responsiveFov += dynamicFov;
             giantTarget += dynamicFov;
             view.fieldOfView = Mathf.Lerp(responsiveFov, giantTarget, giantBlend);

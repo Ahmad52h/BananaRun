@@ -170,12 +170,20 @@ public class RunnerAnimation : MonoBehaviour
 
     private void OnEnable()
     {
-        if (health != null) health.HitTaken += ReactToHit;
+        if (health != null)
+        {
+            health.HitTaken += ReactToHit;
+            health.ProjectileHit += ReactToProjectile;
+        }
     }
 
     private void OnDisable()
     {
-        if (health != null) health.HitTaken -= ReactToHit;
+        if (health != null)
+        {
+            health.HitTaken -= ReactToHit;
+            health.ProjectileHit -= ReactToProjectile;
+        }
     }
 
     private void RefreshHitTrigger()
@@ -191,8 +199,10 @@ public class RunnerAnimation : MonoBehaviour
     private void ReactToHit()
     {
         if (motor != null) motor.ApplySlowdown(hitSpeedMultiplier, slowdownDuration);
-        BeginStumble(hitDuration);
+        BeginStumble(Mathf.Max(hitDuration, health.ProjectileStunRemaining));
     }
+
+    private void ReactToProjectile() => BeginStumble(health.ProjectileStunRemaining);
 
     private void Start()
     {
@@ -215,7 +225,7 @@ public class RunnerAnimation : MonoBehaviour
     {
         if (animator == null || health == null || motor == null || controller == null) return;
         if (frozen) return;
-        if (health.IsDead)
+        if (health.HasFailed)
         {
             animator.speed = 0f;
             frozen = true;
@@ -315,7 +325,7 @@ public class RunnerAnimation : MonoBehaviour
     public void ReactToSlip(float duration = 0.8f)
     {
         if (health.IsRunOver) return;
-        BeginStumble(duration);
+        BeginStumble(Mathf.Max(duration, health.ProjectileStunRemaining));
     }
 
     private void BeginStumble(float duration)

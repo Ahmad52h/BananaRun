@@ -53,18 +53,29 @@ public class FallingCoconutHazard : MonoBehaviour
     {
         if (!initialized || impacted || Time.time - launchedAt < warningSeconds) return;
         var health = other.GetComponentInParent<PlayerHealth>();
-        if (health != null) Hit(health);
+        var rival = other.GetComponentInParent<RivalRunner>();
+        if (health != null || rival != null) Impact();
     }
 
     private void Impact()
     {
         if (impacted) return;
+        impacted = true;
+        PlayerHealth stunnedPlayer = null;
+        RivalRunner stunnedRival = null;
         foreach (var collider in Physics.OverlapSphere(target + Vector3.up * 0.7f, impactRadius))
         {
             var health = collider.GetComponentInParent<PlayerHealth>();
-            if (health != null) { Hit(health); break; }
+            if (health != null && health != stunnedPlayer)
+            {
+                var powers = health.GetComponent<PowerUpManager>();
+                if (powers != null && powers.IsActive(PowerUpType.Bulldozer)) powers.AwardBulldozerPoints();
+                else health.TakeProjectileHit();
+                stunnedPlayer = health;
+            }
+            var rival = collider.GetComponentInParent<RivalRunner>();
+            if (rival != null && rival != stunnedRival) { rival.TakeProjectileHit(); stunnedRival = rival; }
         }
-        impacted = true;
         if (impactEffect != null)
         {
             var effect = Instantiate(impactEffect, target + Vector3.up * 0.2f, Quaternion.identity);
@@ -76,13 +87,4 @@ public class FallingCoconutHazard : MonoBehaviour
         Destroy(gameObject);
     }
 
-    private void Hit(PlayerHealth health)
-    {
-        var powers = health.GetComponent<PowerUpManager>();
-        if (powers != null && powers.IsActive(PowerUpType.Bulldozer))
-            powers.AwardBulldozerPoints();
-        else health.TakeHit();
-        impacted = true;
-        Destroy(gameObject);
-    }
 }

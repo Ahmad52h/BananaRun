@@ -42,6 +42,7 @@ public class RunnerMotor : MonoBehaviour
     private float slowdownDuration;
     private float slowdownMultiplier = 1f;
     private PowerUpManager powerUps;
+    private PlayerHealth health;
     private MonkeyFootstepDust dustEffects;
     
     // حفظ الأبعاد الأصلية للكوليدر
@@ -64,6 +65,8 @@ public class RunnerMotor : MonoBehaviour
     }
 
     public float LaneDistance => laneDistance;
+    public int ActiveLane => currentLane;
+    public float ActiveLaneWorldX => centerX + currentLane * laneDistance;
     public float LaneChangeDuration => laneDistance / Mathf.Max(0.01f, laneChangeSpeed);
     public float ForwardSpeed => forwardSpeed;
     public float MaximumForwardSpeed => forwardSpeed * maxRunSpeedMultiplier;
@@ -93,12 +96,14 @@ public class RunnerMotor : MonoBehaviour
         : 2f * Mathf.Sqrt(jumpHeight * -2f * gravity) / -gravity;
     public bool IsGliderJump => gliderJump;
     public bool IsSliding => sliding;
+    public bool IsStunned => health != null && health.IsProjectileStunned;
     // Latch the arc through landing so an expiring pickup cannot change gravity mid-jump.
     public float EffectiveGravity => gravity * (gliderJump ? GliderGravityScale : 1f);
     public float CurrentSpeed
     {
         get
         {
+            if (IsStunned) return 0f;
             if (difficultyStartupComplete && difficultySource == null && !warnedMissingDifficultySource)
             {
                 Debug.LogWarning("RunnerMotor has no difficulty generator; CurrentSpeed is using baseline difficulty.", this);
@@ -121,6 +126,7 @@ public class RunnerMotor : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         powerUps = GetComponent<PowerUpManager>();
+        health = GetComponent<PlayerHealth>();
         dustEffects = GetComponent<MonkeyFootstepDust>();
         if (dustEffects == null) dustEffects = gameObject.AddComponent<MonkeyFootstepDust>();
         
@@ -165,7 +171,7 @@ public class RunnerMotor : MonoBehaviour
             targetX,
             laneChangeSpeed * deltaTime
         );
-        if (IsLaneLocked) nextX = transform.position.x;
+        if (IsLaneLocked || IsStunned) nextX = transform.position.x;
 
         Vector3 movement = new Vector3(
             nextX - transform.position.x,
@@ -184,7 +190,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void ChangeLane(int direction)
 {
-    if (!isActiveAndEnabled || IsLaneLocked)
+    if (!isActiveAndEnabled || IsLaneLocked || IsStunned)
         return;
 
     int oldLane = currentLane;
@@ -205,7 +211,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (!isActiveAndEnabled || controller == null || !controller.enabled || sliding || !controller.isGrounded)
+        if (!isActiveAndEnabled || IsStunned || controller == null || !controller.enabled || sliding || !controller.isGrounded)
             return;
 
         gliderJump = powerUps != null && powerUps.IsActive(PowerUpType.Glider);
@@ -215,7 +221,7 @@ public class RunnerMotor : MonoBehaviour
 
     public bool Slide()
     {
-        if (!isActiveAndEnabled || sliding || IsLaneLocked || !controller.enabled)
+        if (!isActiveAndEnabled || IsStunned || sliding || IsLaneLocked || !controller.enabled)
             return false;
 
         // إذا كان القرد في الهواء وضغطت زحلقة، ينزل بسرعة للأرض ويتزحلق

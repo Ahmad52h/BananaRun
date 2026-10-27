@@ -6,6 +6,7 @@ public class CoconutProjectile : MonoBehaviour
     [SerializeField, Min(1f)] private float maxDistance = 30f;
     [SerializeField, Min(0.01f)] private float radius = 0.25f;
     [SerializeField] private LayerMask obstacleMask;
+    [SerializeField] private Vector3 spinDegreesPerSecond = new Vector3(210f, 330f, 120f);
     [Header("Smash Audio")]
     [SerializeField] private AudioClip smashBoxSound;
     [SerializeField, Range(0f, 1f)] private float smashVolume = 1f;
@@ -20,6 +21,7 @@ public class CoconutProjectile : MonoBehaviour
 
     private void Update()
     {
+        transform.Rotate(spinDegreesPerSecond * Time.deltaTime, Space.Self);
         if (owner == null || owner.IsRunOver)
         {
             Destroy(gameObject);
@@ -69,6 +71,10 @@ public class CoconutProjectile : MonoBehaviour
 
     private void Hit(Collider other)
     {
+        var rival = other.GetComponentInParent<RivalRunner>();
+        if (rival != null) rival.TakeProjectileHit();
+        var health = other.GetComponentInParent<PlayerHealth>();
+        if (health != null && health != owner) health.TakeProjectileHit();
         RunnerObstacle obstacle =
             other.GetComponentInParent<RunnerObstacle>();
 

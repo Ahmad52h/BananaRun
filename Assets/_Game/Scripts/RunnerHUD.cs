@@ -182,7 +182,7 @@ public class RunnerHUD : MonoBehaviour
         }
         if (health == null) return;
         health.HeartsChanged += UpdateHearts;
-        health.Died += ShowGameOver;
+        health.RunFailed += ShowGameOver;
     }
     private void Start() { if (health != null) UpdateHearts(health.Hearts); }
     private void Update()
@@ -190,7 +190,7 @@ public class RunnerHUD : MonoBehaviour
         if (health == null) return;
         if (heartsText != null) heartsText.color = health.IsProtected && !health.IsRunOver ? Color.yellow : Color.white;
         if (throwButton != null) throwButton.interactable = !resultShown && coconutThrower != null && coconutThrower.CanThrow;
-        if (health.IsRunOver && health.IsDead && !resultShown && gameOverReveal == null) ShowGameOver();
+        if (health.HasFailed && !resultShown && gameOverReveal == null) ShowGameOver();
     }
     private void OnDisable()
     {
@@ -202,7 +202,7 @@ public class RunnerHUD : MonoBehaviour
         if (coconutBadge != null) coconutBadge.localScale = Vector3.one;
         if (health == null) return;
         health.HeartsChanged -= UpdateHearts;
-        health.Died -= ShowGameOver;
+        health.RunFailed -= ShowGameOver;
     }
     private void UpdateHearts(int hearts)
     {
@@ -247,15 +247,45 @@ public class RunnerHUD : MonoBehaviour
         }
 
         gameOverReveal = null;
-        if (!resultShown) ShowResult(false, inventory != null ? inventory.Count : 0);
+        if (!resultShown)
+        {
+            ShowResult(false, inventory != null ? inventory.Count : 0);
+            if (health != null && health.FailureReason == PlayerHealth.FailureCause.RivalFinishedFirst)
+            {
+                if (resultText != null) resultText.text = "RIVAL WINS!";
+                if (subtitle != null) subtitle.text = "The rival reached the finish first. Race again!";
+            }
+            else if (health != null && health.FailureReason == PlayerHealth.FailureCause.NotEnoughBananas)
+            {
+                if (resultText != null) resultText.text = "NOT ENOUGH BANANAS";
+                if (subtitle != null) subtitle.text = "Collect enough bananas before reaching the basket.";
+            }
+        }
     }
 
     public void ShowFinishResult(
         bool won, int collected, int required,
         bool quotaEnabled = false, int quotaTarget = 0) =>
         ShowResult(
-            won && collected >= required && health != null && !health.IsDead,
+            won && collected >= required && health != null && !health.HasFailed,
             collected, required, quotaEnabled, quotaTarget);
+
+    public void ShowCompetitiveFinishResult(bool won, int collected, int rivalCollected, int required,
+        bool quotaEnabled, int quotaTarget)
+    {
+        ShowFinishResult(won, collected, required, quotaEnabled, quotaTarget);
+        if (health == null || health.IsDead) return;
+        if (resultText != null)
+            resultText.text = won ? "YOU WIN!" : collected < required ? "NOT ENOUGH BANANAS" : "RIVAL WINS!";
+        if (subtitle != null)
+            subtitle.text = won ? "You reached the basket first with enough bananas!" : collected < required
+                ? $"Collect {required} bananas and race to the basket." : "The rival filled its basket first. Race again!";
+        if (scoreText != null)
+        {
+            scoreText.text = $"BASKET   YOU {collected}/{required}   RIVAL {rivalCollected}/{required}";
+            if (won) scoreText.text += $"\nTotal Score: {collected + (powers != null ? powers.BonusPoints : 0)}";
+        }
+    }
 
     private void ShowResult(
         bool victory, int bananas, int required = 0,

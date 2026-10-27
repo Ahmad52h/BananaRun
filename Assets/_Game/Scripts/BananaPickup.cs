@@ -17,6 +17,7 @@ public class BananaPickup : MonoBehaviour
 
     private Renderer[] visualRenderers;
     private bool collected;
+    public int Value => value;
 
     private void Awake()
     {
@@ -72,6 +73,8 @@ public class BananaPickup : MonoBehaviour
         PlayerHealth health = inventory.GetComponent<PlayerHealth>();
         if (health != null && health.IsRunOver)
             return;
+        var rival = inventory.GetComponent<RivalRunner>();
+        if (rival != null && rival.HasFinished) return;
 
         collected = true;
         inventory.AddBananas(value);

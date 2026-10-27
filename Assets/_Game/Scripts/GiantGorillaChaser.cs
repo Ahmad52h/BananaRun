@@ -1,8 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Brief visual chase. The gorilla reveals itself when the run starts and whenever
-/// the player takes a hit, then retreats behind the camera until the next hit.
+/// Pursues the trailing or impacted runner, and catches the player when the run fails.
 /// It has no collider, player damage, or physics body.
 /// </summary>
 public sealed class GiantGorillaChaser : MonoBehaviour
@@ -21,6 +20,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private RunnerMotor player;
+    [SerializeField] private RivalRunner rival;
     [SerializeField] private GameObject gorillaModel;
     [SerializeField] private Avatar gorillaAvatar;
     [SerializeField] private RuntimeAnimatorController runController;
@@ -73,6 +73,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private readonly Collider[] obstacleHits = new Collider[24];
     private PlayerHealth health;
+    private RunnerAnimation playerAnimation;
+    private Transform chaseTarget;
+    private float chaseGroundY;
+    private bool subscribedToRival, targetWasInTrouble;
     private RunnerCourseGenerator generator;
     private GameObject modelInstance;
     private AudioSource voice;
@@ -108,6 +112,11 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private float retreatStartedAt;
     private float retreatStartGap;
 
+    public Transform CurrentTarget => catchStarted && player != null ? player.transform : chaseTarget;
+    public bool IsCatchingPlayer => catchStarted;
+    public bool HasCaughtPlayer => catchLocked;
+    private float TargetSpeed => rival != null && chaseTarget == rival.transform ? rival.CurrentSpeed : player.CurrentSpeed;
+
     private bool IsVisibleWindow =>
         visibility == VisibilityState.StartReveal || visibility == VisibilityState.HitReveal;
 
@@ -129,6 +138,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
         health = player.GetComponent<PlayerHealth>();
         if (health == null) return false;
+        if (rival == null) rival = FindAnyObjectByType<RivalRunner>();
+        playerAnimation = player.GetComponent<RunnerAnimation>();
+        chaseTarget = player.transform;
+        chaseGroundY = player.transform.position.y;
         generator = FindAnyObjectByType<RunnerCourseGenerator>();
         modelInstance = Instantiate(gorillaModel, transform);
         modelInstance.name = "Gorilla Visual";
@@ -237,10 +250,18 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private void SubscribeToHits()
     {
-        if (health == null || subscribedToHits) return;
-        health.HitTaken += OnPlayerHit;
-        health.Died += OnPlayerDied;
-        subscribedToHits = true;
+        if (health != null && !subscribedToHits)
+        {
+            health.HitTaken += OnPlayerHit;
+            health.ProjectileHit += OnPlayerHit;
+            health.RunFailed += OnPlayerDied;
+            subscribedToHits = true;
+        }
+        if (rival != null && !subscribedToRival)
+        {
+            rival.Impacted += OnRivalHit;
+            subscribedToRival = true;
+        }
     }
 
     private void LateUpdate()
@@ -252,18 +273,18 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             return;
         }
 
-        if (!health.IsDead) catchSuppressed = false;
+        if (!health.HasFailed) catchSuppressed = false;
 
         // EndRun disables RunnerMotor before Died is raised, so the catch has to
         // run before the normal "player is inactive" early return.
-        if (health.IsDead && !catchStarted && !catchSuppressed) BeginCatchSequence();
+        if (health.HasFailed && !catchStarted && !catchSuppressed) BeginCatchSequence();
         if (catchStarted)
         {
             UpdateCatch(Time.deltaTime);
             return;
         }
 
-        if (health.IsRunOver || !player.isActiveAndEnabled)
+        if (health.IsRunOver || (!player.isActiveAndEnabled && (rival == null || !rival.isActiveAndEnabled || rival.HasFinished)))
         {
             StopAudio();
             if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
@@ -273,8 +294,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
 
+        UpdateChaseTarget();
         UpdateVisibilityState(dt);
-        FollowPlayer();
+        FollowRunner();
 
         if (gorillaAnimator != null)
         {
@@ -284,7 +306,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             }
             else
             {
-                float speedRatio = player.CurrentSpeed / Mathf.Max(0.01f, player.ForwardSpeed);
+                float speedRatio = TargetSpeed / Mathf.Max(0.01f, player.ForwardSpeed);
                 gorillaAnimator.speed = Mathf.Clamp(speedRatio, 0.7f, 1.4f);
             }
         }
@@ -295,7 +317,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             return;
         }
 
-        stepTravel += Mathf.Max(0f, Time.deltaTime * player.CurrentSpeed);
+        stepTravel += Mathf.Max(0f, Time.deltaTime * TargetSpeed);
         if (stepTravel >= stepDistance)
         {
             stepTravel %= stepDistance;
@@ -305,7 +327,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (Time.time >= nextObstacleCheck)
         {
             nextObstacleCheck = Time.time + 0.08f;
-            SmashBreakablesBehindPlayer(player.transform.position.z);
+            SmashBreakablesBehindPlayer(chaseTarget.position.z);
         }
     }
 
@@ -340,12 +362,39 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         }
     }
 
-    private void FollowPlayer()
+    private void UpdateChaseTarget()
     {
-        Vector3 target = player.transform.position;
+        bool playerTrouble = (playerAnimation != null && playerAnimation.IsReactingToHit) ||
+            player.CurrentSpeed < player.ForwardSpeed * 0.65f ||
+            (player.transform.position.y < chaseGroundY - 1.5f && (playerAnimation == null || !playerAnimation.IsVineControlled));
+        bool rivalTrouble = rival != null && !rival.HasFinished &&
+            (rival.IsStumbling || rival.IsRecoveringFromFall || rival.CurrentSpeed < player.ForwardSpeed * 0.65f);
+        Transform selected = chaseTarget != null ? chaseTarget : player.transform;
+        if (rival == null || rival.HasFinished) selected = player.transform;
+        else if (!player.isActiveAndEnabled) selected = rival.transform;
+        else if (playerTrouble != rivalTrouble) selected = playerTrouble ? player.transform : rival.transform;
+        else if (Mathf.Abs(player.transform.position.z - rival.transform.position.z) > 0.75f)
+            selected = player.transform.position.z < rival.transform.position.z ? player.transform : rival.transform;
+        bool trouble = selected == player.transform ? playerTrouble : rivalTrouble;
+        bool changed = selected != chaseTarget;
+        chaseTarget = selected;
+        bool trailing = rival != null && !rival.HasFinished &&
+            (selected == player.transform ? rival.transform.position.z - player.transform.position.z :
+                player.transform.position.z - rival.transform.position.z) > 2f;
+        if (changed || (trouble && !targetWasInTrouble) ||
+            ((trouble || trailing) && (visibility == VisibilityState.Hidden || visibility == VisibilityState.Retreating)))
+            BeginImpactReveal();
+        if ((trouble || trailing) && visibility == VisibilityState.HitReveal)
+            stateEndsAt = Mathf.Max(stateEndsAt, Time.time + 0.5f);
+        targetWasInTrouble = trouble;
+    }
+
+    private void FollowRunner()
+    {
+        Vector3 target = chaseTarget != null ? chaseTarget.position : player.transform.position;
         float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, laneDelay);
         float z = Mathf.SmoothDamp(transform.position.z, target.z - currentGap, ref forwardVelocity, forwardSmoothing);
-        transform.position = new Vector3(x, target.y, z);
+        transform.position = new Vector3(x, Mathf.Max(chaseGroundY, target.y), z);
         transform.rotation = Quaternion.identity;
     }
 
@@ -386,7 +435,19 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private void OnPlayerHit()
     {
         if (!initialized || player == null || health == null || health.IsRunOver) return;
+        chaseTarget = player.transform;
+        BeginImpactReveal();
+    }
 
+    private void OnRivalHit()
+    {
+        if (!initialized || rival == null || health == null || health.IsRunOver || catchStarted) return;
+        chaseTarget = rival.transform;
+        BeginImpactReveal();
+    }
+
+    private void BeginImpactReveal()
+    {
         bool wasOffscreen = visibility == VisibilityState.Hidden || visibility == VisibilityState.Retreating;
         visibility = VisibilityState.HitReveal;
         stateEndsAt = Time.time + Mathf.Max(0.1f, hitRevealSeconds);
@@ -398,7 +459,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             gorillaAnimator.speed = 1f;
             if (gorillaAnimator.isActiveAndEnabled) gorillaAnimator.Play("Run", 0, 0f);
         }
-        PlayGrunt();
+        if (Time.time - lastGruntAt > 0.15f) PlayGrunt();
     }
 
     private void OnPlayerDied()
@@ -411,6 +472,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (catchStarted || catchSuppressed || !initialized || player == null || health == null) return;
 
         catchStarted = true;
+        chaseTarget = player.transform;
         catchLocked = false;
         catchFrozen = false;
         catchPlayerMoved = false;
@@ -680,8 +742,11 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (health != null && subscribedToHits)
         {
             health.HitTaken -= OnPlayerHit;
-            health.Died -= OnPlayerDied;
+            health.ProjectileHit -= OnPlayerHit;
+            health.RunFailed -= OnPlayerDied;
         }
+        if (rival != null && subscribedToRival) rival.Impacted -= OnRivalHit;
+        subscribedToRival = false;
         subscribedToHits = false;
 
         bool wasCatching = catchStarted;
