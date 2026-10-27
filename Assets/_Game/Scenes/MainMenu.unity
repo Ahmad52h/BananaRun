@@ -7604,7 +7604,7 @@ MonoBehaviour:
   backgroundMusic: {fileID: 8300000, guid: 39ba35a4673b4984aa90c086da1b66c6, type: 3}
   bananaCollect: {fileID: 8300000, guid: 0989ea56bc4c7734ab81cb445700af3e, type: 3}
   monkeyHurt: {fileID: 0}
-  hurtVolume: 0.6
+  hurtVolume: 0.4
   musicVolume: 0.012
   bananaVolume: 0.65
   victoryVolume: 0.65
