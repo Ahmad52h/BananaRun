@@ -72,6 +72,7 @@ public class RunnerMotor : MonoBehaviour
     public float MaximumForwardSpeed => forwardSpeed * maxRunSpeedMultiplier;
     public float NormalJumpHeight => jumpHeight;
     public float HighJumpHeight => jumpHeight * gliderHeightMultiplier;
+    public float GliderGravityMultiplier => GliderGravityScale;
     public float HighJumpDuration => 2f * Mathf.Sqrt(HighJumpHeight * -2f * gravity * GliderGravityScale) / (-gravity * GliderGravityScale);
     public float SpeedAtDifficulty(float difficulty) => forwardSpeed * Mathf.Lerp(1f, maxRunSpeedMultiplier,
         Mathf.Clamp01(speedDifficultyCurve == null ? difficulty : speedDifficultyCurve.Evaluate(Mathf.Clamp01(difficulty))));
@@ -109,9 +110,11 @@ public class RunnerMotor : MonoBehaviour
                 Debug.LogWarning("RunnerMotor has no difficulty generator; CurrentSpeed is using baseline difficulty.", this);
                 warnedMissingDifficultySource = true;
             }
-            return SpeedAtDifficulty(difficultySource != null ? difficultySource.Difficulty : 0f) * (slowdownDuration > 0f
+            float speed = SpeedAtDifficulty(difficultySource != null ? difficultySource.Difficulty : 0f) * (slowdownDuration > 0f
                 ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
                 : 1f);
+            if (powerUps != null && powerUps.HasThunder) speed *= PowerUpManager.ThunderSpeedMultiplier;
+            return speed;
         }
     }
 
@@ -186,6 +189,30 @@ public class RunnerMotor : MonoBehaviour
         {
             verticalVelocity = 0f;
         }
+
+        if (EnforceRiverGapFall()) return;
+    }
+
+    /// <summary>
+    /// The river has no walkable floor. If a solid leftover collider keeps the
+    /// controller grounded over the gap, or the runner has already dropped past
+    /// the fall line, hand them to the crocodile lake immediately. Airborne
+    /// runners above the fall line keep their jump arc.
+    /// </summary>
+    private bool EnforceRiverGapFall()
+    {
+        var gap = RiverCrocodileGauntlet.Active;
+        if (gap == null || health == null || !gap.IsInsideRiverGap(transform.position.z))
+            return false;
+
+        bool walkingOnWater = controller.isGrounded;
+        bool belowFallLine = transform.position.y <= RiverCrocodileGauntlet.WaterFallY;
+        if (!walkingOnWater && !belowFallLine) return false;
+
+        // Bypass the normal ground clamp; the lake controller owns the visible sink.
+        verticalVelocity = -30f;
+        gap.HandlePlayerFall(health);
+        return true;
     }
 
     public void ChangeLane(int direction)

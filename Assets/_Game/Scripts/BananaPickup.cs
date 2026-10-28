@@ -39,12 +39,10 @@ public class BananaPickup : MonoBehaviour
 
     private void Update()
     {
-        PowerUpManager powers = PowerUpManager.ActivePlayer;
-        if (!collected && powers != null && powers.IsActive(PowerUpType.Magnet))
+        if (!collected && TryGetMagnetTarget(out Vector3 target, out float radius) &&
+            (target - transform.position).sqrMagnitude <= radius * radius)
         {
-            Vector3 target = powers.transform.position + Vector3.up * 0.9f;
-            if ((target - transform.position).sqrMagnitude <= powers.MagnetRadius * powers.MagnetRadius)
-                transform.position = Vector3.MoveTowards(transform.position, target, magnetPullSpeed * Time.deltaTime);
+            transform.position = Vector3.MoveTowards(transform.position, target, magnetPullSpeed * Time.deltaTime);
         }
         if (visual != null)
         {
@@ -53,6 +51,36 @@ public class BananaPickup : MonoBehaviour
                 rotationSpeed * Time.deltaTime,
                 Space.World
             );
+        }
+    }
+
+    private bool TryGetMagnetTarget(out Vector3 target, out float radius)
+    {
+        Vector3 bestTarget = Vector3.zero;
+        float bestRadius = 0f;
+        float nearest = float.MaxValue;
+
+        var player = PowerUpManager.ActivePlayer;
+        if (player != null && player.isActiveAndEnabled && player.IsActive(PowerUpType.Magnet))
+            ConsiderMagnet(player.transform.position + Vector3.up * 0.9f, player.MagnetRadius);
+
+        var rival = RivalRunner.ActiveRival;
+        if (rival != null && rival.isActiveAndEnabled && rival.HasMagnet)
+            ConsiderMagnet(rival.transform.position + Vector3.up * 0.9f, rival.MagnetRadius);
+
+        target = bestTarget;
+        radius = bestRadius;
+        return radius > 0f;
+
+        void ConsiderMagnet(Vector3 candidate, float candidateRadius)
+        {
+            float distance = (candidate - transform.position).sqrMagnitude;
+            if (distance <= candidateRadius * candidateRadius && distance < nearest)
+            {
+                nearest = distance;
+                bestTarget = candidate;
+                bestRadius = candidateRadius;
+            }
         }
     }
 
@@ -76,11 +104,14 @@ public class BananaPickup : MonoBehaviour
         var rival = inventory.GetComponent<RivalRunner>();
         if (rival != null && rival.HasFinished) return;
 
+        bool collectedByRival = rival != null;
         collected = true;
         inventory.AddBananas(value);
 
         PlayPickupEffect();
-        if (RunnerAudio.Instance != null) RunnerAudio.Instance.PlayBananaCollect(collectSound);
+        // Pickup audio and the banana combo belong to the player only.
+        if (!collectedByRival && RunnerAudio.Instance != null)
+            RunnerAudio.Instance.PlayBananaCollect(collectSound);
         gameObject.SetActive(false);
     }
     private void PlayPickupEffect()

@@ -33,6 +33,8 @@ public class BananaPeelHazard : MonoBehaviour
         var health = motor.GetComponent<PlayerHealth>();
         var controller = motor.GetComponent<CharacterController>();
         if (health == null || health.IsRunOver || controller == null || !controller.isGrounded) return;
+        var powerUps = motor.GetComponent<PowerUpManager>();
+        if (powerUps != null && powerUps.HasThunder) return;
         consumed = true;
         GetComponent<BoxCollider>().enabled = false;
         motor.LockLaneSwitching(slipDuration);

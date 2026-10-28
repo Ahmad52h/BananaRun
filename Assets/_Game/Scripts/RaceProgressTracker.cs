@@ -17,7 +17,7 @@ public sealed class RaceProgressTracker : MonoBehaviour
     [SerializeField] private float playerDistance, rivalDistance;
     [SerializeField] private int playerPosition = 1, rivalPosition = 1;
 
-    private float startZ, finishZ, previousPlayerZ, previousRivalZ, previousTime, nextDraw;
+    private float startZ, finishZ, previousPlayerZ, previousRivalZ, previousTime;
     private PlayerHealth playerHealth;
     private RunnerAnimation playerAnimation;
     private CharacterController playerController;
@@ -49,6 +49,14 @@ public sealed class RaceProgressTracker : MonoBehaviour
 
     private void Start()
     {
+        // The debug standings overlay duplicated the top HUD progress bar.
+        // Keep it in the scene for compatibility but never show it.
+        if (standingsLabel != null)
+        {
+            standingsLabel.text = string.Empty;
+            standingsLabel.gameObject.SetActive(false);
+        }
+
         if (player == null || rival == null || finishGate == null)
         {
             Debug.LogError("RaceProgressTracker needs a player, rival and finish gate.", this);
@@ -140,13 +148,6 @@ public sealed class RaceProgressTracker : MonoBehaviour
         previousPlayerZ = playerZ;
         previousRivalZ = rivalZ;
         previousTime = Time.time;
-        if (standingsLabel != null && Time.unscaledTime >= nextDraw)
-        {
-            nextDraw = Time.unscaledTime + 0.1f;
-            string place = leader == Competitor.Tied ? "TIED" : $"PLACE {playerPosition}/2";
-            standingsLabel.text = $"{place}   YOU {playerDistance:0} m   RIVAL {rivalDistance:0} m\n" +
-                $"BANANAS   YOU {PlayerBananas}/{finishGate.RequiredBananas}   RIVAL {RivalBananas}/{finishGate.RequiredBananas}";
-        }
     }
 
     public void RecordPlayerFinish() => RefreshStandings();

@@ -399,7 +399,7 @@ public static class ProgressiveDifficultyVerification
                 if (elapsed < motor.HighJumpDuration + 0.4f) return;
                 int high = arc.Count(b => !b.gameObject.activeSelf);
                 Check(high > normalCollected && high >= arc.Length - 1, "Green jump collects the high arc (" + high + "/" + arc.Length + ", apex " + apex.ToString("F2") + "m).");
-                Place(0, 603.5f);
+                Place(vine.transform.position.x, 603.5f);
                 motor.LockLaneSwitching(0.4f);
                 var inventory = motor.GetComponent<BananaInventory>();
                 Check(inventory != null, "Player BananaInventory remains available for the vine swing.");

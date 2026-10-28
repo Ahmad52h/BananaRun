@@ -181,7 +181,8 @@ public static class PowerSystemsVerification
                     var zone = Object.FindFirstObjectByType<VineSwingZone>();
                     motor.enabled = true;
                     motor.GetComponent<RunnerInput>().enabled = true;
-                    Place(new Vector3(0, -0.5f, zone.transform.position.z));
+                    Place(new Vector3(zone.transform.position.x, -0.5f, zone.transform.position.z));
+                    motor.LockLaneSwitching(0.6f);
                     Next();
                     break;
                 case 5:

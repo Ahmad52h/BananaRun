@@ -143,6 +143,7 @@ public class RunnerCourseGenerator : MonoBehaviour
         }
         playerRadius = controller.radius + 0.2f;
         BuildPalette();
+        EnsureRuntimePowerUpPalette();
         if (palette.Count == 0)
         {
             Debug.LogWarning("RunnerCourseGenerator cannot build a course: obstacle prefabs have no enabled BoxCollider profiles.", this);
@@ -162,6 +163,8 @@ public class RunnerCourseGenerator : MonoBehaviour
         float previousEnd = z - ReactionDistance - 12f;
         float safeRunStart = previousEnd;
         float nextPowerUp = z + 55f;
+        float lastPowerUpZ = float.NegativeInfinity;
+        bool thunderSpawned = false;
         while (z < end)
         {
             float difficulty = DifficultyAt(z);
@@ -225,7 +228,14 @@ public class RunnerCourseGenerator : MonoBehaviour
                 int kind = powerIndex++ % powerUpPrefabs.Length;
                 if (powerUpPrefabs[kind] != null)
                 {
-                    Instantiate(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1), Quaternion.identity, transform);
+                    var pickup = Instantiate(powerUpPrefabs[kind],
+                        new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1),
+                        Quaternion.identity, transform);
+                    // Generated Shield/Thunder templates start inactive so their
+                    // Awake can build the model at the final world spawn point.
+                    if (!pickup.gameObject.activeSelf) pickup.gameObject.SetActive(true);
+                    lastPowerUpZ = z;
+                    if (powerUpPrefabs[kind].Type == PowerUpType.Thunder) thunderSpawned = true;
                     if (powerUpPrefabs[kind].Type == PowerUpType.Glider && bananaPrefab != null && random.NextDouble() < highBananaFrequency)
                     {
                         float arcStart = z + 1f + player.MaximumForwardSpeed * 0.8f;
@@ -251,6 +261,50 @@ public class RunnerCourseGenerator : MonoBehaviour
             z += Mathf.Max(player.MaximumForwardSpeed * minimumReactionSeconds,
                 Mathf.Lerp(easyObstacleSpacing, hardObstacleSpacing, difficulty) * jitter
                 / Mathf.Lerp(1f, obstacleFrequencyMultiplier, difficulty));
+        }
+        // Guarantee that the Speed Boost pickup exists even if the cadence or a
+        // river skip consumed its slot. A safe generated row is always preferred;
+        // reusing the final safe row is a last-resort fallback.
+        if (!thunderSpawned && powerUpPrefabs != null)
+        {
+            int thunderIndex = -1;
+            for (int i = 0; i < powerUpPrefabs.Length; i++)
+                if (powerUpPrefabs[i] != null && powerUpPrefabs[i].Type == PowerUpType.Thunder)
+                {
+                    thunderIndex = i;
+                    break;
+                }
+
+            if (thunderIndex >= 0)
+            {
+                bool found = false;
+                Section target = default;
+                for (int i = sections.Count - 1; i >= 0; i--)
+                {
+                    Section candidate = sections[i];
+                    if (candidate.Z >= end || candidate.Z <= lastPowerUpZ + 18f) continue;
+                    target = candidate;
+                    found = true;
+                    break;
+                }
+                if (!found)
+                    for (int i = sections.Count - 1; i >= 0; i--)
+                    {
+                        Section candidate = sections[i];
+                        if (candidate.Z >= end) continue;
+                        target = candidate;
+                        found = true;
+                        break;
+                    }
+
+                if (found)
+                {
+                    var pickup = Instantiate(powerUpPrefabs[thunderIndex],
+                        new Vector3(centerX + target.SafeLane * laneWidth, groundHeight + 1.15f, target.Z + 1f),
+                        Quaternion.identity, transform);
+                    if (!pickup.gameObject.activeSelf) pickup.gameObject.SetActive(true);
+                }
+            }
         }
         PatternCount = row;
         if (row == 0)
@@ -358,6 +412,42 @@ public class RunnerCourseGenerator : MonoBehaviour
             foreach (var hazard in prefab.GetComponentsInChildren<DynamicRunnerHazard>())
             { profile.dynamic = true; profile.travel = Mathf.Max(profile.travel, hazard.TravelLimit); }
             palette.Add(profile);
+        }
+    }
+
+    private void EnsureRuntimePowerUpPalette()
+    {
+        var runtime = new List<PowerUpPickup>();
+        bool hasShield = false, hasThunder = false;
+        ParticleSystem effect = null;
+        if (powerUpPrefabs != null)
+        {
+            foreach (var pickup in powerUpPrefabs)
+            {
+                if (pickup == null) continue;
+                runtime.Add(pickup);
+                if (pickup.Type == PowerUpType.Shield) hasShield = true;
+                if (pickup.Type == PowerUpType.Thunder) hasThunder = true;
+                if (effect == null && pickup.CollectionEffect != null) effect = pickup.CollectionEffect;
+            }
+        }
+
+        // Level01's serialized array predates these two abilities. Expand it at
+        // runtime instead of touching the scene asset.
+        if (!hasShield) runtime.Add(PowerUpPickup.CreateTemplate(PowerUpType.Shield, effect));
+        if (!hasThunder) runtime.Add(PowerUpPickup.CreateTemplate(PowerUpType.Thunder, effect));
+        powerUpPrefabs = runtime.ToArray();
+
+        // Fit the expanded palette inside the existing course. The original
+        // 120 m cadence leaves the newly appended Thunder pickup beyond the
+        // finish line, so tighten it with a small safety margin for the river
+        // skip and all five abilities to appear.
+        if (player != null && finishLine != null && runtime.Count > 1)
+        {
+            float first = Mathf.Max(startDistance, player.transform.position.z + 20f) + 55f;
+            float last = finishLine.position.z - finishApproach - 8f;
+            float fit = (last - first) / (runtime.Count - 1) * 0.75f;
+            if (fit > 0f) powerUpSpacing = Mathf.Min(powerUpSpacing, Mathf.Max(45f, fit));
         }
     }
 

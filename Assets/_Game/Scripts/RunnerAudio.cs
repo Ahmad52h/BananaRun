@@ -77,6 +77,17 @@ public class RunnerAudio : MonoBehaviour
             ref lastPickupSoundAt, 0.06f);
     }
 
+    /// <summary>
+    /// Ability pickups reuse the light collect cue but do not advance the banana
+    /// combo. Callers intentionally skip this for the rival.
+    /// </summary>
+    public void PlayPowerUpCollect()
+    {
+        if (!isActiveAndEnabled || effectsSource == null || bananaCollect == null) return;
+        PlayRandomizedEffect(effectsSource, bananaCollect, bananaVolume * 0.9f,
+            ref lastPickupSoundAt, 0.06f);
+    }
+
     private float PlayRandomizedEffect(AudioSource source, AudioClip clip, float volume,
         ref float lastPlayedAt, float cooldown)
     {

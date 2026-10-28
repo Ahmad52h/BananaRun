@@ -1,15 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Pursues the trailing or impacted runner, and catches the player when the run fails.
-/// It has no collider, player damage, or physics body.
+/// Stays offscreen until a runner is hit, surges in briefly, then retreats.
+/// Also catches the player when the run fails. No collisions, damage, or physics.
 /// </summary>
 public sealed class GiantGorillaChaser : MonoBehaviour
 {
     private enum VisibilityState
     {
         Hidden,
-        StartReveal,
         HitReveal,
         Retreating,
         Catching
@@ -26,26 +25,24 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField] private RuntimeAnimatorController runController;
     [SerializeField] private Material gorillaMaterial;
     [SerializeField] private AudioClip gruntClip;
-    [SerializeField] private AudioClip footstepClip;
 
     [Header("Chase")]
     [SerializeField, Min(0.01f)] private float laneDelay = 0.32f;
     [SerializeField, Min(0.01f)] private float forwardSmoothing = 0.13f;
-    [SerializeField, Min(0.1f)] private float stepDistance = 3.2f;
     [SerializeField, Min(0.1f)] private float visualScale = 1f;
     [SerializeField] private float visualYaw;
     [Tooltip("Local offset for the spawned visual. X shifts the gorilla out of the camera's center so the player stays visible; Y fine-tunes the auto-grounding.")]
     [SerializeField] private Vector3 visualOffset = new Vector3(1.2f, 0f, 0f);
 
     [Header("Visibility Windows")]
-    [Tooltip("Distance behind the player when the gorilla first appears at run start.")]
-    [SerializeField, Min(2f)] private float startRevealGap = 2.9f;
-    [Tooltip("Distance behind the player when the gorilla surges in after a hit.")]
+    [Tooltip("Distance behind the hit runner where the gorilla surges into view.")]
     [SerializeField, Min(2f)] private float hitRevealGap = 2.6f;
-    [Tooltip("Distance behind the player where the gorilla is fully out of the camera frustum.")]
+    [Tooltip("Distance behind the runner where the gorilla is fully out of the camera frustum.")]
     [SerializeField, Min(7.5f)] private float hiddenGap = 10.5f;
-    [SerializeField, Min(0.5f)] private float startRevealSeconds = 2.75f;
+    [Tooltip("Minimum time the gorilla stays visible after a hit.")]
     [SerializeField, Min(0.5f)] private float hitRevealSeconds = 3.5f;
+    [Tooltip("Extra time the gorilla stays visible after the hit runner is back at full speed.")]
+    [SerializeField, Min(0f)] private float recoveryLingerSeconds = 0.35f;
     [Tooltip("How quickly the gorilla closes from the hidden gap into hit-reveal range.")]
     [SerializeField, Min(1f)] private float revealApproachSpeed = 24f;
     [Tooltip("Time spent smoothly moving from the reveal gap back to the hidden gap.")]
@@ -70,27 +67,29 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField] private Vector3 catchHandOffset = new Vector3(0f, 0.06f, 0f);
 
     [Header("Audio")]
+    [Tooltip("Impact grunt only; footsteps are intentionally muted.")]
     [SerializeField, Range(0f, 1f)] private float gruntVolume = 0.8f;
-    [SerializeField, Range(0f, 1f)] private float footstepVolume = 0.65f;
 
     private readonly Collider[] obstacleHits = new Collider[24];
     private PlayerHealth health;
     private RunnerAnimation playerAnimation;
     private Transform chaseTarget;
     private float chaseGroundY;
-    private bool subscribedToRival, targetWasInTrouble;
+    private bool subscribedToRival;
     private RunnerCourseGenerator generator;
     private GameObject modelInstance;
     private AudioSource voice;
-    private AudioSource footsteps;
     private float laneVelocity;
     private float forwardVelocity;
-    private float stepTravel;
     private Animator gorillaAnimator;
     private float nextObstacleCheck;
     private bool initialized;
     private bool subscribedToHits;
-    private bool startRevealIssued;
+    private bool playerWasReacting;
+    private bool rivalWasStumbling;
+    private Renderer[] gorillaRenderers;
+    private Transform revealTarget;
+    private bool gorillaVisible;
 
     private bool catchStarted;
     private bool catchLocked;
@@ -121,8 +120,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     public bool HasCaughtPlayer => catchLocked;
     private float TargetSpeed => rival != null && chaseTarget == rival.transform ? rival.CurrentSpeed : player.CurrentSpeed;
 
-    private bool IsVisibleWindow =>
-        visibility == VisibilityState.StartReveal || visibility == VisibilityState.HitReveal;
+    private bool IsVisibleWindow => visibility == VisibilityState.HitReveal;
 
     private void Awake()
     {
@@ -159,6 +157,13 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         foreach (Rigidbody body in modelInstance.GetComponentsInChildren<Rigidbody>(true)) body.isKinematic = true;
         foreach (Light light in modelInstance.GetComponentsInChildren<Light>(true)) light.enabled = false;
         foreach (Camera camera in modelInstance.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+        // The gorilla is a silent visual threat: no imported footsteps or stomps.
+        foreach (AudioSource source in modelInstance.GetComponentsInChildren<AudioSource>(true))
+        {
+            source.playOnAwake = false;
+            source.Stop();
+            source.mute = true;
+        }
         gorillaAnimator = modelInstance.GetComponentInChildren<Animator>(true);
         if (gorillaAnimator == null) gorillaAnimator = modelInstance.AddComponent<Animator>();
         if (gorillaAvatar != null && gorillaAvatar.isValid &&
@@ -173,6 +178,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         gorillaAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         gorillaAnimator.enabled = true;
         Renderer[] renderers = modelInstance.GetComponentsInChildren<Renderer>(true);
+        gorillaRenderers = renderers;
+        gorillaVisible = true;
         foreach (Renderer renderer in renderers)
         {
             ActivateVisualHierarchy(renderer.transform);
@@ -203,27 +210,32 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (gorillaAnimator.avatar == null)
             Debug.LogWarning("GiantGorillaChaser: the gorilla Animator has no Avatar; the Run clip will not retarget.", this);
 
+        // The prefab can carry legacy audio sources. Mute them before adding the
+        // single impact-grunt source; footsteps are deliberately removed.
+        foreach (AudioSource source in GetComponents<AudioSource>())
+        {
+            source.playOnAwake = false;
+            source.Stop();
+            source.mute = true;
+        }
         voice = gameObject.AddComponent<AudioSource>();
         voice.playOnAwake = false;
         voice.loop = false;
         voice.spatialBlend = 0f;
         voice.volume = Mathf.Min(gruntVolume, 0.4f);
         voice.pitch = 0.8f;
-        footsteps = gameObject.AddComponent<AudioSource>();
-        footsteps.playOnAwake = false;
-        footsteps.loop = false;
-        footsteps.spatialBlend = 0f;
-        footsteps.volume = Mathf.Min(footstepVolume, 0.4f);
-        footsteps.pitch = 0.9f;
         if (gruntClip == null)
             Debug.LogWarning("GiantGorillaChaser: gruntClip is not assigned. Assign GorillaSound to the Grunt Clip field.", this);
-        if (footstepClip == null)
-            Debug.LogWarning("GiantGorillaChaser: footstepClip is not assigned. Assign GiantFootstep to the Footstep Clip field.", this);
 
         visibility = VisibilityState.Hidden;
         currentGap = hiddenGap;
+        transform.position = new Vector3(
+            player.transform.position.x,
+            player.transform.position.y,
+            player.transform.position.z - Mathf.Max(2f, hiddenGap));
+        SetGorillaVisible(false);
         initialized = true;
-        Debug.Log($"GiantGorillaChaser bound to {player.name}; spawned {renderers.Length} renderer(s) with grunt '{(gruntClip != null ? gruntClip.name : "MISSING")}' and footstep '{(footstepClip != null ? footstepClip.name : "MISSING")}'.", this);
+        Debug.Log($"GiantGorillaChaser bound to {player.name}; spawned {renderers.Length} renderer(s) with grunt '{(gruntClip != null ? gruntClip.name : "MISSING")}' and footsteps muted.", this);
         return true;
     }
 
@@ -237,7 +249,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     {
         if (!initialized) return;
         SubscribeToHits();
-        BeginStartReveal();
+        HideImmediately();
     }
 
     private void Start()
@@ -249,7 +261,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             return;
         }
         SubscribeToHits();
-        if (!startRevealIssued) BeginStartReveal();
+        HideImmediately();
     }
 
     private void SubscribeToHits()
@@ -273,6 +285,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (player == null || health == null || !player.gameObject.activeInHierarchy)
         {
             StopAudio();
+            SetGorillaVisible(false);
             if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
             return;
         }
@@ -291,6 +304,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (health.IsRunOver || (!player.isActiveAndEnabled && (rival == null || !rival.isActiveAndEnabled || rival.HasFinished)))
         {
             StopAudio();
+            SetGorillaVisible(false);
             if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
             return;
         }
@@ -298,6 +312,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
 
+        DetectRunnerImpacts();
         UpdateChaseTarget();
         UpdateVisibilityState(dt);
         FollowRunner();
@@ -315,18 +330,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             }
         }
 
-        if (!IsVisibleWindow)
-        {
-            if (footsteps != null && footsteps.isPlaying) footsteps.Stop();
-            return;
-        }
-
-        stepTravel += Mathf.Max(0f, Time.deltaTime * TargetSpeed);
-        if (stepTravel >= stepDistance)
-        {
-            stepTravel %= stepDistance;
-            if (footstepClip != null && footsteps != null) footsteps.PlayOneShot(footstepClip);
-        }
+        if (!IsVisibleWindow) return;
 
         if (Time.time >= nextObstacleCheck)
         {
@@ -339,11 +343,18 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     {
         switch (visibility)
         {
-            case VisibilityState.StartReveal:
             case VisibilityState.HitReveal:
-                float revealGap = visibility == VisibilityState.StartReveal ? startRevealGap : hitRevealGap;
-                currentGap = Mathf.MoveTowards(currentGap, revealGap, revealApproachSpeed * dt);
-                if (Time.time >= stateEndsAt) BeginRetreat();
+                currentGap = Mathf.MoveTowards(currentGap, hitRevealGap, revealApproachSpeed * dt);
+                if (IsRevealTargetRecovering())
+                {
+                    // Stay in frame while the hit runner is still slowed, then
+                    // add a short grace beat once they are back at full speed.
+                    stateEndsAt = Mathf.Max(stateEndsAt, Time.time + recoveryLingerSeconds);
+                }
+                else if (Time.time >= stateEndsAt)
+                {
+                    BeginRetreat();
+                }
                 break;
 
             case VisibilityState.Retreating:
@@ -353,6 +364,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
                 {
                     visibility = VisibilityState.Hidden;
                     currentGap = hiddenGap;
+                    SetGorillaVisible(false);
                 }
                 break;
 
@@ -366,31 +378,64 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         }
     }
 
+    private void DetectRunnerImpacts()
+    {
+        // HitTaken/ProjectileHit events cover obstacles and fruit, while this
+        // poll also catches banana-peel slips (which never call TakeHit).
+        bool playerReacting = playerAnimation != null && playerAnimation.IsReactingToHit;
+        if (playerReacting && !playerWasReacting) OnPlayerHit();
+        playerWasReacting = playerReacting;
+
+        bool rivalStumbling = rival != null && !rival.HasFinished &&
+            (rival.IsStumbling || rival.IsRecoveringFromFall);
+        if (rivalStumbling && !rivalWasStumbling) OnRivalHit();
+        rivalWasStumbling = rivalStumbling;
+    }
+
     private void UpdateChaseTarget()
     {
-        bool playerTrouble = (playerAnimation != null && playerAnimation.IsReactingToHit) ||
-            player.CurrentSpeed < player.ForwardSpeed * 0.65f ||
-            (player.transform.position.y < chaseGroundY - 1.5f && (playerAnimation == null || !playerAnimation.IsVineControlled));
-        bool rivalTrouble = rival != null && !rival.HasFinished &&
-            (rival.IsStumbling || rival.IsRecoveringFromFall || rival.CurrentSpeed < player.ForwardSpeed * 0.65f);
-        Transform selected = chaseTarget != null ? chaseTarget : player.transform;
-        if (rival == null || rival.HasFinished) selected = player.transform;
-        else if (!player.isActiveAndEnabled) selected = rival.transform;
-        else if (playerTrouble != rivalTrouble) selected = playerTrouble ? player.transform : rival.transform;
-        else if (Mathf.Abs(player.transform.position.z - rival.transform.position.z) > 0.75f)
-            selected = player.transform.position.z < rival.transform.position.z ? player.transform : rival.transform;
-        bool trouble = selected == player.transform ? playerTrouble : rivalTrouble;
-        bool changed = selected != chaseTarget;
-        chaseTarget = selected;
-        bool trailing = rival != null && !rival.HasFinished &&
-            (selected == player.transform ? rival.transform.position.z - player.transform.position.z :
-                player.transform.position.z - rival.transform.position.z) > 2f;
-        if (changed || (trouble && !targetWasInTrouble) ||
-            ((trouble || trailing) && (visibility == VisibilityState.Hidden || visibility == VisibilityState.Retreating)))
-            BeginImpactReveal();
-        if ((trouble || trailing) && visibility == VisibilityState.HitReveal)
-            stateEndsAt = Mathf.Max(stateEndsAt, Time.time + 0.5f);
-        targetWasInTrouble = trouble;
+        if (revealTarget != null && IsRunnerAvailable(revealTarget))
+        {
+            chaseTarget = revealTarget;
+            return;
+        }
+
+        if (rival != null && !rival.HasFinished &&
+            (player == null || !player.isActiveAndEnabled))
+        {
+            chaseTarget = rival.transform;
+            return;
+        }
+
+        if (player != null) chaseTarget = player.transform;
+    }
+
+    private bool IsRunnerAvailable(Transform candidate)
+    {
+        if (candidate == null || player == null) return false;
+        if (candidate == player.transform)
+            return player.isActiveAndEnabled && (health == null || !health.IsRunOver);
+        if (rival != null && candidate == rival.transform)
+            return rival.isActiveAndEnabled && !rival.HasFinished;
+        return candidate.gameObject.activeInHierarchy;
+    }
+
+    private bool IsRevealTargetRecovering()
+    {
+        Transform target = revealTarget != null ? revealTarget : chaseTarget;
+        if (target == null) return false;
+
+        if (target == player.transform)
+        {
+            if (health != null && health.IsProjectileStunned) return true;
+            if (playerAnimation != null && playerAnimation.IsReactingToHit) return true;
+            return player.CurrentSpeed < player.ForwardSpeed * 0.85f;
+        }
+
+        if (rival != null && target == rival.transform)
+            return rival.IsStumbling || rival.IsRecoveringFromFall;
+
+        return false;
     }
 
     private void FollowRunner()
@@ -402,28 +447,39 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         transform.rotation = Quaternion.identity;
     }
 
-    private void BeginStartReveal()
+    private void SetGorillaVisible(bool visible)
     {
-        if (player == null) return;
-        startRevealIssued = true;
+        if (gorillaVisible == visible) return;
+        gorillaVisible = visible;
 
-        Vector3 target = player.transform.position;
-        visibility = VisibilityState.StartReveal;
-        stateEndsAt = Time.time + Mathf.Max(0.1f, startRevealSeconds);
-        currentGap = Mathf.Max(2f, startRevealGap);
-        laneVelocity = forwardVelocity = 0f;
-        stepTravel = 0f;
-        nextObstacleCheck = Time.time;
-        transform.position = new Vector3(target.x, target.y, target.z - currentGap);
-        transform.rotation = Quaternion.identity;
-        StopFootsteps();
-
-        if (gorillaAnimator != null)
+        if (gorillaRenderers != null)
         {
-            gorillaAnimator.speed = 1f;
-            if (gorillaAnimator.isActiveAndEnabled) gorillaAnimator.Play("Run", 0, 0f);
+            foreach (Renderer renderer in gorillaRenderers)
+                if (renderer != null) renderer.enabled = visible;
         }
-        PlayGrunt();
+
+        if (!visible && gorillaAnimator != null)
+            gorillaAnimator.speed = 0f;
+    }
+
+    private void HideImmediately()
+    {
+        visibility = VisibilityState.Hidden;
+        currentGap = hiddenGap;
+        laneVelocity = forwardVelocity = 0f;
+        revealTarget = null;
+        stateEndsAt = 0f;
+        SetGorillaVisible(false);
+        StopAudio();
+
+        if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
+        if (player != null)
+        {
+            transform.position = new Vector3(
+                player.transform.position.x,
+                player.transform.position.y,
+                player.transform.position.z - Mathf.Max(2f, hiddenGap));
+        }
     }
 
     private void BeginRetreat()
@@ -432,13 +488,12 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         visibility = VisibilityState.Retreating;
         retreatStartedAt = Time.time;
         retreatStartGap = currentGap;
-        stepTravel = 0f;
-        StopFootsteps();
     }
 
     private void OnPlayerHit()
     {
-        if (!initialized || player == null || health == null || health.IsRunOver) return;
+        if (!initialized || player == null || health == null || health.IsRunOver || catchStarted) return;
+        revealTarget = player.transform;
         chaseTarget = player.transform;
         BeginImpactReveal();
     }
@@ -446,6 +501,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private void OnRivalHit()
     {
         if (!initialized || rival == null || health == null || health.IsRunOver || catchStarted) return;
+        revealTarget = rival.transform;
         chaseTarget = rival.transform;
         BeginImpactReveal();
     }
@@ -454,14 +510,14 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     {
         bool wasOffscreen = visibility == VisibilityState.Hidden || visibility == VisibilityState.Retreating;
         visibility = VisibilityState.HitReveal;
-        stateEndsAt = Time.time + Mathf.Max(0.1f, hitRevealSeconds);
-        stepTravel = 0f;
+        stateEndsAt = Mathf.Max(stateEndsAt, Time.time + Mathf.Max(0.1f, hitRevealSeconds));
         nextObstacleCheck = Time.time;
-        StopFootsteps();
-        if (wasOffscreen && gorillaAnimator != null)
+        if (wasOffscreen) SetGorillaVisible(true);
+        if (gorillaAnimator != null)
         {
             gorillaAnimator.speed = 1f;
-            if (gorillaAnimator.isActiveAndEnabled) gorillaAnimator.Play("Run", 0, 0f);
+            if (gorillaAnimator.isActiveAndEnabled && wasOffscreen)
+                gorillaAnimator.Play("Run", 0, 0f);
         }
         if (Time.time - lastGruntAt > 0.15f) PlayGrunt();
     }
@@ -497,9 +553,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         visibility = VisibilityState.Catching;
         laneVelocity = 0f;
         forwardVelocity = 0f;
-        stepTravel = 0f;
         nextObstacleCheck = Time.time;
-        StopFootsteps();
+        revealTarget = player.transform;
+        SetGorillaVisible(true);
 
         if (catchWindupComplete) PlayCatchAnimation();
         else if (gorillaAnimator != null) gorillaAnimator.speed = 0.85f;
@@ -527,7 +583,6 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private void UpdateCatch(float dt)
     {
         if (dt <= 0f) return;
-        if (footsteps != null && footsteps.isPlaying) footsteps.Stop();
 
         if (!catchWindupComplete)
         {
@@ -722,8 +777,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
         visibility = VisibilityState.Hidden;
         currentGap = hiddenGap;
-        stepTravel = 0f;
         laneVelocity = forwardVelocity = 0f;
+        revealTarget = null;
+        SetGorillaVisible(false);
         StopAudio();
         Debug.Log("GiantGorillaChaser: released the monkey and returned to Run.", this);
     }
@@ -750,15 +806,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         voice.PlayOneShot(gruntClip);
     }
 
-    private void StopFootsteps()
-    {
-        if (footsteps != null) footsteps.Stop();
-    }
-
     private void StopAudio()
     {
         if (voice != null) voice.Stop();
-        StopFootsteps();
     }
 
     private void OnDisable()
@@ -788,8 +838,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
         visibility = VisibilityState.Hidden;
         currentGap = hiddenGap;
-        stepTravel = 0f;
         laneVelocity = forwardVelocity = 0f;
-        startRevealIssued = false;
+        revealTarget = null;
+        playerWasReacting = false;
+        rivalWasStumbling = false;
+        SetGorillaVisible(false);
     }
 }

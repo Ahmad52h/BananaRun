@@ -1,6 +1,6 @@
 using UnityEngine;
 
-/// <summary>Owns movement until landing; aligns the animated palm after pose evaluation.</summary>
+/// <summary>Owns movement until landing; supports the player and the rival.</summary>
 [DefaultExecutionOrder(200)]
 [RequireComponent(typeof(BoxCollider), typeof(Rigidbody))]
 public class VineSwingZone : MonoBehaviour
@@ -13,17 +13,20 @@ public class VineSwingZone : MonoBehaviour
     [SerializeField] private Transform restingVine;
     [SerializeField] private ParticleSystem anchorLeaves;
     [SerializeField] private Vector3 palmOffset = new Vector3(0, 0.06f, 0);
+    [SerializeField] private bool allowRival = true;
 
     private RunnerMotor motor;
+    private RivalRunner rivalRunner;
     private RunnerInput input;
     private RunnerAnimation animationDriver;
     private CharacterController controller;
     private PlayerHealth health;
-    private Transform hand, visual;
+    private Animator animator;
+    private Transform runner, hand, visual;
     private Vector3 visualPosition, end, grip, pivot, forward, flightStart, launchVelocity;
     private Quaternion visualRotation;
-    private bool motorEnabled, inputEnabled, controllerEnabled, released;
-    private float elapsed, length, angle, cooldown;
+    private bool motorEnabled, inputEnabled, controllerEnabled, released, rivalSwing;
+    private float elapsed, length, angle, cooldown, gravity = -21f;
     private GameObject bananaPrefab;
     private int bananaCount;
     private BananaPickup[] swingBananas;
@@ -31,10 +34,31 @@ public class VineSwingZone : MonoBehaviour
     private bool bananasSpawned;
     private Vector3 previousBananaProbe;
 
-    public bool IsSwinging => motor != null;
+    private static readonly int VineState = Animator.StringToHash("Base Layer.VineSwing");
+    private static readonly int JumpState = Animator.StringToHash("Base Layer.Jump");
+
+    public bool IsSwinging => runner != null;
     public bool IsReleased => released;
     public Vector3 GripPosition => grip;
     public float GripError => hand == null ? 0f : Vector3.Distance(hand.TransformPoint(palmOffset), grip);
+    public ParticleSystem AnchorLeaves => anchorLeaves;
+
+    /// <summary>Assigns the runtime-cloned vine parts without touching scene YAML.</summary>
+    public void ConfigureRuntime(Transform landing, Transform pivotTransform, LineRenderer line,
+        Transform resting, ParticleSystem leaves)
+    {
+        landingPoint = landing;
+        vinePivot = pivotTransform;
+        vineLine = line;
+        restingVine = resting;
+        anchorLeaves = leaves;
+        if (vineLine != null)
+        {
+            vineLine.useWorldSpace = true;
+            vineLine.positionCount = 2;
+            vineLine.enabled = false;
+        }
+    }
 
     private void Awake()
     {
@@ -45,56 +69,136 @@ public class VineSwingZone : MonoBehaviour
         if (vineLine != null) { vineLine.useWorldSpace = true; vineLine.positionCount = 2; vineLine.enabled = false; }
     }
 
-    private void OnTriggerEnter(Collider other) => TryGrab(other.GetComponentInParent<RunnerMotor>());
-    private void OnTriggerStay(Collider other) => TryGrab(other.GetComponentInParent<RunnerMotor>());
+    private void OnTriggerEnter(Collider other) => TryGrab(other);
+    private void OnTriggerStay(Collider other) => TryGrab(other);
 
-    private void TryGrab(RunnerMotor candidate)
+    private void TryGrab(Collider other)
     {
-        if (IsSwinging || Time.time < cooldown || candidate == null || !candidate.enabled ||
-            landingPoint == null || vinePivot == null || !candidate.CompareTag("Player")) return;
+        if (IsSwinging || Time.time < cooldown || other == null) return;
+
+        var candidate = other.GetComponentInParent<RunnerMotor>();
+        if (candidate != null)
+        {
+            TryGrabPlayer(candidate);
+            return;
+        }
+
+        if (!allowRival) return;
+        var rival = other.GetComponentInParent<RivalRunner>();
+        if (rival != null) TryGrabRival(rival);
+    }
+
+    private void TryGrabPlayer(RunnerMotor candidate)
+    {
+        if (candidate == null || !candidate.enabled || candidate.IsSliding ||
+            !candidate.CompareTag("Player")) return;
         var driver = candidate.GetComponent<RunnerAnimation>();
         var playerHealth = candidate.GetComponent<PlayerHealth>();
-        var animator = candidate.GetComponentInChildren<Animator>();
-        if (driver == null || driver.IsVineControlled || playerHealth == null || playerHealth.IsRunOver || animator == null ||
-            !animator.isHuman || !animator.HasState(0, Animator.StringToHash("Base Layer.VineSwing"))) return;
-        hand = animator.GetBoneTransform(HumanBodyBones.LeftHand);
-        if (hand == null) return;
+        var driverAnimator = candidate.GetComponentInChildren<Animator>();
+        if (driver == null || driver.IsVineControlled || playerHealth == null || playerHealth.IsRunOver ||
+            driverAnimator == null) return;
+
+        CharacterController candidateController = candidate.GetComponent<CharacterController>();
+        if (!PrepareSwing(candidate.transform, candidateController, driverAnimator, candidate.BaseGravity)) return;
+
         motor = candidate;
         health = playerHealth;
-        controller = motor.GetComponent<CharacterController>();
-        input = motor.GetComponent<RunnerInput>();
+        input = candidate.GetComponent<RunnerInput>();
         animationDriver = driver;
-        visual = animator.transform;
+        motorEnabled = candidate.enabled;
+        inputEnabled = input != null && input.enabled;
+        rivalSwing = false;
+        BeginSwing();
+    }
+
+    private void TryGrabRival(RivalRunner candidate)
+    {
+        if (candidate == null || !candidate.enabled || candidate.HasFinished || candidate.IsStumbling ||
+            candidate.IsRecoveringFromFall || candidate.IsSliding) return;
+
+        CharacterController candidateController = candidate.GetComponent<CharacterController>();
+        var candidateAnimator = candidate.GetComponentInChildren<Animator>();
+        if (!PrepareSwing(candidate.transform, candidateController, candidateAnimator, candidate.BaseGravity)) return;
+
+        rivalRunner = candidate;
+        rivalSwing = true;
+        motor = null;
+        health = null;
+        input = null;
+        animationDriver = null;
+        BeginSwing();
+    }
+
+    /// <summary>Validates and snapshots a runner before either the player or rival takes the vine.</summary>
+    private bool PrepareSwing(Transform candidateRunner, CharacterController candidateController,
+        Animator candidateAnimator, float baseGravity)
+    {
+        if (candidateRunner == null || candidateController == null || !candidateController.enabled ||
+            candidateAnimator == null || !candidateAnimator.isHuman ||
+            !candidateAnimator.HasState(0, VineState) || landingPoint == null || vinePivot == null) return false;
+
+        Transform candidateHand = candidateAnimator.GetBoneTransform(HumanBodyBones.LeftHand);
+        if (candidateHand == null) return false;
+
+        Vector3 start = candidateRunner.position;
+        Vector3 candidateEnd = landingPoint.position;
+        float bottom = candidateController.center.y - candidateController.height * 0.5f;
+        if (Physics.Raycast(candidateEnd + Vector3.up * 5f, Vector3.down, out var ground, 10f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            candidateEnd.y = ground.point.y - bottom + candidateController.skinWidth;
+
+        Vector3 candidatePivot = vinePivot.position;
+        Vector3 candidateForward = Vector3.ProjectOnPlane(candidatePivot - start, Vector3.up).normalized;
+        if (candidateForward.sqrMagnitude < 0.01f) return false;
+        Vector3 catchPoint = start + Vector3.up * 2.4f;
+        float horizontal = Vector3.ProjectOnPlane(catchPoint - candidatePivot, Vector3.up).magnitude;
+        float vertical = Mathf.Max(1f, candidatePivot.y - catchPoint.y);
+
+        runner = candidateRunner;
+        controller = candidateController;
+        animator = candidateAnimator;
+        hand = candidateHand;
+        visual = candidateAnimator.transform;
         visualPosition = visual.localPosition;
         visualRotation = visual.localRotation;
-        motorEnabled = motor.enabled;
-        inputEnabled = input != null && input.enabled;
         controllerEnabled = controller.enabled;
-        Vector3 start = motor.transform.position;
-        end = landingPoint.position;
-        end.x = start.x;
-        float bottom = controller.center.y - controller.height * 0.5f;
-        if (Physics.Raycast(end + Vector3.up * 5f, Vector3.down, out var ground, 10f,
-            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-            end.y = ground.point.y - bottom + controller.skinWidth;
-        pivot = vinePivot.position;
-        forward = Vector3.ProjectOnPlane(pivot - start, Vector3.up).normalized;
-        Vector3 catchPoint = start + Vector3.up * 2.4f;
-        float horizontal = Vector3.ProjectOnPlane(catchPoint - pivot, Vector3.up).magnitude;
-        float vertical = Mathf.Max(1f, pivot.y - catchPoint.y);
+        gravity = baseGravity;
+        end = candidateEnd;
+        pivot = candidatePivot;
+        forward = candidateForward;
         length = Mathf.Sqrt(horizontal * horizontal + vertical * vertical);
         angle = Mathf.Atan2(horizontal, vertical);
         elapsed = 0f;
         released = false;
-        motor.enabled = false;
-        if (input != null) input.enabled = false;
         controller.enabled = false;
-        animationDriver.BeginVineSwing();
+        return true;
+    }
+
+    private void BeginSwing()
+    {
+        if (!rivalSwing)
+        {
+            if (motor != null) motor.enabled = false;
+            if (input != null) input.enabled = false;
+            if (animationDriver != null) animationDriver.BeginVineSwing();
+        }
+        else if (rivalRunner != null)
+        {
+            rivalRunner.enabled = false;
+            if (animator != null)
+            {
+                animator.SetBool("Sliding", false);
+                animator.SetBool("VineAttached", true);
+                animator.SetFloat("JumpSpeed", 1f);
+                animator.CrossFadeInFixedTime(VineState, 0.16f, 0, 0f);
+            }
+        }
+
         if (restingVine != null) restingVine.gameObject.SetActive(false);
         if (vineLine != null) vineLine.enabled = true;
         if (anchorLeaves != null) anchorLeaves.Play(true);
         UpdateGrip(0f);
-        SpawnBananaTrail();
+        if (!rivalSwing) SpawnBananaTrail();
         previousBananaProbe = grip;
     }
 
@@ -113,7 +217,7 @@ public class VineSwingZone : MonoBehaviour
     private void SpawnBananaTrail()
     {
         if (bananasSpawned) return;
-        foreach (var course in FindObjectsByType<RunnerCourseGenerator>(FindObjectsSortMode.None))
+        foreach (var course in FindObjectsByType<RunnerCourseGenerator>())
             if (course.Player == motor) { bananaPrefab = course.BananaPrefab; bananaCount = course.RopeBananaCount; break; }
         bananaCount = Mathf.Clamp(bananaCount, 0, 24);
         if (bananaPrefab == null || bananaCount <= 0) return;
@@ -149,7 +253,12 @@ public class VineSwingZone : MonoBehaviour
     private void Update()
     {
         if (!IsSwinging) return;
-        if (health == null || health.IsRunOver) { Restore(false); return; }
+        if (rivalSwing)
+        {
+            if (rivalRunner == null || rivalRunner.HasFinished) { Restore(false); return; }
+        }
+        else if (health == null || health.IsRunOver) { Restore(false); return; }
+
         elapsed += Time.deltaTime;
         if (!released)
         {
@@ -159,10 +268,10 @@ public class VineSwingZone : MonoBehaviour
         else
         {
             float t = Mathf.Min(elapsed, flightDuration);
-            motor.transform.position = flightStart + launchVelocity * t + Vector3.up * (0.5f * motor.BaseGravity * t * t);
+            runner.position = flightStart + launchVelocity * t + Vector3.up * (0.5f * gravity * t * t);
             visual.localRotation = Quaternion.Slerp(visual.localRotation, visualRotation, 1f - Mathf.Exp(-12f * Time.deltaTime));
             visual.localPosition = Vector3.Lerp(visual.localPosition, visualPosition, 1f - Mathf.Exp(-12f * Time.deltaTime));
-            if (elapsed >= flightDuration) { motor.transform.position = end; Restore(true); }
+            if (elapsed >= flightDuration) { runner.position = end; Restore(true); }
         }
     }
 
@@ -173,8 +282,8 @@ public class VineSwingZone : MonoBehaviour
         visual.localRotation = visualRotation;
         visual.rotation = Quaternion.Slerp(Quaternion.identity,
             Quaternion.FromToRotation(Vector3.up, (pivot - grip).normalized), catchBlend) * visual.rotation;
-        motor.transform.position += (grip - hand.TransformPoint(palmOffset)) * catchBlend;
-        CollectSwingBananas(hand.TransformPoint(palmOffset));
+        runner.position += (grip - hand.TransformPoint(palmOffset)) * catchBlend;
+        if (!rivalSwing) CollectSwingBananas(hand.TransformPoint(palmOffset));
         if (vineLine != null)
         {
             vineLine.SetPosition(0, pivot);
@@ -183,26 +292,57 @@ public class VineSwingZone : MonoBehaviour
         if (elapsed < swingDuration) return;
         released = true;
         elapsed = 0f;
-        flightStart = motor.transform.position;
+        flightStart = runner.position;
         // Deliberate push-off at the forward apex; gravity solves the safe landing.
-        launchVelocity = (end - flightStart) / flightDuration - Vector3.up * (0.5f * motor.BaseGravity * flightDuration);
-        animationDriver.ReleaseVine(flightDuration);
+        launchVelocity = (end - flightStart) / flightDuration - Vector3.up * (0.5f * gravity * flightDuration);
+        if (rivalSwing)
+        {
+            if (animator != null)
+            {
+                animator.SetBool("VineAttached", false);
+                animator.SetFloat("JumpSpeed", 1f);
+                animator.CrossFadeInFixedTime(JumpState, 0.12f, 0, 0f);
+            }
+        }
+        else if (animationDriver != null)
+        {
+            animationDriver.ReleaseVine(flightDuration);
+        }
     }
 
     private void Restore(bool landed)
     {
-        if (motor != null)
+        if (runner != null)
         {
-            if (!landed && health != null && !health.IsRunOver) motor.transform.position = end;
+            if (!landed) runner.position = end;
             if (visual != null) { visual.localPosition = visualPosition; visual.localRotation = visualRotation; }
             if (controller != null) controller.enabled = controllerEnabled;
-            motor.ResetVerticalVelocity();
-            if (animationDriver != null) animationDriver.EndVineSwing();
-            bool alive = health != null && !health.IsRunOver;
-            motor.enabled = motorEnabled && alive;
-            if (input != null) input.enabled = inputEnabled && alive;
+
+            if (rivalRunner != null)
+            {
+                rivalRunner.ResumeFromVine(end);
+            }
+            else if (motor != null)
+            {
+                motor.ResetVerticalVelocity();
+                if (animationDriver != null) animationDriver.EndVineSwing();
+                bool alive = health != null && !health.IsRunOver;
+                motor.enabled = motorEnabled && alive;
+                if (input != null) input.enabled = inputEnabled && alive;
+            }
         }
+
+        runner = null;
         motor = null;
+        rivalRunner = null;
+        input = null;
+        animationDriver = null;
+        controller = null;
+        health = null;
+        animator = null;
+        hand = null;
+        visual = null;
+        rivalSwing = false;
         released = false;
         cooldown = Time.time + 1f;
         if (vineLine != null) vineLine.enabled = false;
