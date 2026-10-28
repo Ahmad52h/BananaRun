@@ -125,12 +125,26 @@ public class PowerUpManager : MonoBehaviour
 
     private void Update()
     {
+        ResolvePlayerModel();
         if (playerModel != null)
         {
             Vector3 target = originalModelScale * (IsActive(PowerUpType.Bulldozer) ? giantScale : 1f);
             playerModel.localScale = Vector3.Lerp(playerModel.localScale, target, 1f - Mathf.Exp(-scaleSmoothing * Time.deltaTime));
         }
         RefreshIndicator();
+    }
+
+    /// <summary>
+    /// A prefab variant or a late-instantiated model should still grow for the
+    /// Mega Banana. Resolve the animated visual root once it is available.
+    /// </summary>
+    private void ResolvePlayerModel()
+    {
+        if (playerModel != null) return;
+        var animator = GetComponentInChildren<Animator>();
+        if (animator == null) return;
+        playerModel = animator.transform;
+        originalModelScale = playerModel.localScale;
     }
 
     private void RefreshIndicator()

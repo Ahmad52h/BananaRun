@@ -18,6 +18,7 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private GameObject[] obstaclePrefabs;
     [SerializeField] private GameObject bananaPrefab;
     [SerializeField] private GameObject coconutPrefab;
+    [SerializeField] private GameObject bombPickupPrefab;
     [SerializeField] private PowerUpPickup[] powerUpPrefabs;
     [SerializeField] private FallingCoconutHazard fallingCoconutPrefab;
     [SerializeField] private BananaPeelHazard bananaPeelPrefab;
@@ -223,6 +224,8 @@ public class RunnerCourseGenerator : MonoBehaviour
             }
             if (coconutPrefab != null && row % 5 == 0)
                 SpawnPickup(coconutPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
+            if (bombPickupPrefab != null && row % 5 == 2)
+                SpawnPickup(bombPickupPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
             if (powerUpPrefabs != null && powerUpPrefabs.Length > 0 && z >= nextPowerUp)
             {
                 int kind = powerIndex++ % powerUpPrefabs.Length;

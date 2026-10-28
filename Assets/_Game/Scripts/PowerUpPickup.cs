@@ -12,14 +12,11 @@ public class PowerUpPickup : MonoBehaviour
     [SerializeField, Min(0f)] private float hoverHeight = 1.45f;
     [SerializeField, Min(0f)] private float bobAmplitude = 0.15f;
     [SerializeField, Min(0f)] private float bobSpeed = 1.8f;
-    [SerializeField] private Color auraColor = Color.clear;
 
     private const string BtmResourceFolder = "PowerUps/";
     private bool collected;
     private Transform visualPivot;
-    private Transform aura;
     private float bobPhase;
-    private Vector3 auraBaseScale = Vector3.one;
 
     public PowerUpType Type => type;
     public ParticleSystem CollectionEffect => collectionEffect;
@@ -79,8 +76,6 @@ public class PowerUpPickup : MonoBehaviour
             ReplaceWithBtmVisual();
         else if (visualPivot.childCount == 0)
             BuildFallbackVisual();
-
-        AddGroundAura();
     }
 
     private void AlignToGround()
@@ -201,27 +196,10 @@ public class PowerUpPickup : MonoBehaviour
         if (renderer != null)
         {
             renderer.material = PowerUpVisualUtility.CreateGlowMaterial(
-                PowerUpVisualUtility.ColorFor(type), true);
+                new Color(0.88f, 0.86f, 0.78f, 0.9f));
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
         }
-    }
-
-    private void AddGroundAura()
-    {
-        var auraObject = new GameObject(type + " Ground Aura");
-        auraObject.transform.SetParent(transform, false);
-        auraObject.transform.localPosition = new Vector3(0f, 0.035f, 0f);
-        var filter = auraObject.AddComponent<MeshFilter>();
-        filter.mesh = PowerUpVisualUtility.CreateRingMesh(0.22f, 0.72f);
-        var renderer = auraObject.AddComponent<MeshRenderer>();
-        Color color = auraColor.a > 0.01f ? auraColor : PowerUpVisualUtility.ColorFor(type);
-        color.a = 0.72f;
-        renderer.material = PowerUpVisualUtility.CreateGlowMaterial(color, true);
-        renderer.shadowCastingMode = ShadowCastingMode.Off;
-        renderer.receiveShadows = false;
-        aura = auraObject.transform;
-        auraBaseScale = Vector3.one;
     }
 
     private void Update()
@@ -233,12 +211,6 @@ public class PowerUpPickup : MonoBehaviour
         visualPivot.Rotate(Vector3.up, Mathf.Max(120f, spinSpeed) * Time.deltaTime, Space.Self);
         float bob = Mathf.Sin(Time.time * bobSpeed + bobPhase) * bobAmplitude;
         visualPivot.localPosition = new Vector3(0f, hoverHeight + bob, 0f);
-
-        if (aura != null)
-        {
-            float pulse = 1f + Mathf.Sin(Time.time * 2.7f + bobPhase) * 0.07f;
-            aura.localScale = auraBaseScale * pulse;
-        }
     }
 
     private void OnTriggerEnter(Collider other)

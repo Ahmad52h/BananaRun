@@ -30,6 +30,7 @@ public class RunnerAnimation : MonoBehaviour
     private bool hasHitTrigger;
 
     public bool IsReactingToHit => Time.time < hitEndsAt;
+    public float HitClipLength => stumbleClipLength;
 
     private CharacterController controller;
     private PlayerHealth health;
@@ -334,11 +335,7 @@ public class RunnerAnimation : MonoBehaviour
         RefreshHitTrigger();
         if (animator == null || !animator.isActiveAndEnabled || !hasHitTrigger) return;
         StopThrowOverlay();
-        animator.speed = 1f;
-        animator.SetFloat("StumbleSpeed", stumbleClipLength / Mathf.Max(0.1f, duration));
-        animator.SetBool("Sliding", false);
-        animator.ResetTrigger(hitTriggerHash);
-        animator.SetTrigger(hitTriggerHash);
+        RunnerHitReaction.Play(animator, stumbleClipLength, duration);
         hitEndsAt = Time.time + duration;
         currentState = HitState;
     }

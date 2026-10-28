@@ -27,6 +27,10 @@ public class RunnerHUD : MonoBehaviour
     [Header("Coconut Inventory")]
     [SerializeField] private TMP_Text coconutCountText;
     [SerializeField] private RectTransform coconutBadge;
+    [Header("Secondary Bomb Slot")]
+    [SerializeField] private BombDropper bombDropper;
+    [SerializeField] private TMP_Text bombCountText;
+    [SerializeField] private UnityEngine.UI.Button dropBombButton;
     private int displayedCoconuts;
     private Coroutine coconutPop;
     private Coroutine gameOverReveal;
@@ -56,6 +60,7 @@ public class RunnerHUD : MonoBehaviour
             inventory = health.GetComponent<BananaInventory>();
             powers = health.GetComponent<PowerUpManager>();
             if (coconutThrower == null) coconutThrower = health.GetComponent<CoconutThrower>();
+            if (bombDropper == null) bombDropper = health.GetComponent<BombDropper>();
         }
         if (gameOverPanel == null)
         {
@@ -174,6 +179,11 @@ public class RunnerHUD : MonoBehaviour
 
     private void OnEnable()
     {
+        if (bombDropper != null)
+        {
+            UpdateBombs(bombDropper.CurrentBombs);
+            bombDropper.CountChanged += UpdateBombs;
+        }
         if (coconutThrower != null)
         {
             displayedCoconuts = coconutThrower.CurrentCoconuts;
@@ -190,10 +200,12 @@ public class RunnerHUD : MonoBehaviour
         if (health == null) return;
         if (heartsText != null) heartsText.color = health.IsProtected && !health.IsRunOver ? Color.yellow : Color.white;
         if (throwButton != null) throwButton.interactable = !resultShown && coconutThrower != null && coconutThrower.CanThrow;
+        if (dropBombButton != null) dropBombButton.interactable = !resultShown && bombDropper != null && bombDropper.CanDrop;
         if (health.HasFailed && !resultShown && gameOverReveal == null) ShowGameOver();
     }
     private void OnDisable()
     {
+        if (bombDropper != null) bombDropper.CountChanged -= UpdateBombs;
         if (coconutThrower != null) coconutThrower.CountChanged -= UpdateCoconuts;
         if (coconutPop != null) StopCoroutine(coconutPop);
         coconutPop = null;
@@ -210,6 +222,11 @@ public class RunnerHUD : MonoBehaviour
         if (heartIcons != null) for (int i = 0; i < heartIcons.Length; i++)
             if (heartIcons[i] != null) heartIcons[i].color = i < hearts ? fullHeartColor : emptyHeartColor;
     }
+    private void UpdateBombs(int count)
+    {
+        if (bombCountText != null) bombCountText.text = "x" + count;
+    }
+
     private void UpdateCoconuts(int count)
     {
         if (coconutCountText != null) coconutCountText.text = "x" + count;

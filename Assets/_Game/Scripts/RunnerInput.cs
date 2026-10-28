@@ -24,6 +24,8 @@ public class RunnerInput : MonoBehaviour
     private InputAction right;
     private InputAction jump;
     private InputAction slide;
+    private InputAction dropBomb;
+    private BombDropper bombDropper;
     private InputAction pointerPress;
     private InputAction pointerPosition;
 
@@ -35,6 +37,7 @@ public class RunnerInput : MonoBehaviour
     private void Awake()
     {
         motor = GetComponent<RunnerMotor>();
+        bombDropper = GetComponent<BombDropper>();
 
         controls = new InputActionMap("Runner");
 
@@ -53,6 +56,8 @@ public class RunnerInput : MonoBehaviour
         slide = controls.AddAction("Slide", InputActionType.Button);
         slide.AddBinding("<Keyboard>/s");
         slide.AddBinding("<Keyboard>/downArrow");
+
+        dropBomb = controls.AddAction("DropBomb", InputActionType.Button, "<Keyboard>/b");
 
         pointerPress = controls.AddAction(
             "PointerPress",
@@ -96,6 +101,9 @@ public class RunnerInput : MonoBehaviour
 
         if (slide.WasPressedThisFrame())
             motor.Slide();
+
+        if (dropBomb.WasPressedThisFrame())
+            bombDropper?.Drop();
 
         ReadSwipe();
     }

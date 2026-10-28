@@ -109,7 +109,7 @@ public static class JumpStumbleVerification
                     if (elapsed < 0.3f) return;
                     Check(animator.GetCurrentAnimatorStateInfo(0).IsName("Run"), "Landing blends back to Run.");
                     center = capsule.center; visualPosition = animator.transform.localPosition;
-                    hitObstacle = Object.Instantiate(AssetDatabase.LoadAssetAtPath<RunnerObstacle>("Assets/_Game/Prefabs/TallObstacle.prefab"), motor.transform.position + Vector3.forward * 1.5f, Quaternion.identity);
+                    hitObstacle = Object.Instantiate(AssetDatabase.LoadAssetAtPath<RunnerObstacle>("Assets/_Game/Prefabs/Tropical/TallObstacle.prefab"), motor.transform.position + Vector3.forward * 1.5f, Quaternion.identity);
                     minFoot = float.PositiveInfinity; maxFoot = float.NegativeInfinity; captures = 0;
                     minMeshY = float.PositiveInfinity; sampledMesh = new Mesh();
                     phase = 3; started = Time.time;
@@ -117,7 +117,8 @@ public static class JumpStumbleVerification
                 case 3:
                     if (health.Hearts == hearts) return;
                     Check(health.Hearts == hearts - 1, "Actual obstacle collision triggers damage.");
-                    foreach (var renderer in hitObstacle.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
+                    if (hitObstacle != null)
+                        foreach (var renderer in hitObstacle.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
                     phase = 4; started = Time.time;
                     break;
                 case 4:

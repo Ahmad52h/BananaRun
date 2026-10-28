@@ -104,6 +104,12 @@ public class RunnerCamera : MonoBehaviour
         view = GetComponent<Camera>();
         if (view == null) view = Camera.main;
         defaultFov = view != null ? view.fieldOfView : 60f;
+        // The authored giant framing pulled the camera back and widened the
+        // lens enough to cancel the model's scale-up. Keep a little extra room
+        // so the Mega Banana transformation reads as genuinely larger.
+        giantOffset.z = Mathf.Max(giantOffset.z, -1.4f);
+        giantFov = Mathf.Min(giantFov, Mathf.Max(58f, defaultFov + 4f));
+        giantFovBoost = Mathf.Min(giantFovBoost, 3f);
         powers = target.GetComponent<PowerUpManager>();
         motor = target.GetComponent<RunnerMotor>();
         controller = target.GetComponent<CharacterController>();

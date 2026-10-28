@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Stays offscreen until a runner is hit, surges in briefly, then retreats.
-/// Also catches the player when the run fails. No collisions, damage, or physics.
+/// Also catches the player when the run fails. A trigger receives secondary bomb traps.
 /// </summary>
 public sealed class GiantGorillaChaser : MonoBehaviour
 {
@@ -114,6 +114,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private float stateEndsAt;
     private float retreatStartedAt;
     private float retreatStartGap;
+    private float bombStunEndsAt, bombVerticalVelocity, bombGroundY;
+    public bool IsBombStunned => Time.time < bombStunEndsAt;
 
     public Transform CurrentTarget => catchStarted && player != null ? player.transform : chaseTarget;
     public bool IsCatchingPlayer => catchStarted;
@@ -235,6 +237,17 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             player.transform.position.z - Mathf.Max(2f, hiddenGap));
         SetGorillaVisible(false);
         initialized = true;
+        // Imported model colliders stay disabled. This receiver follows the logical running lane.
+        var trapReceiver = GetComponent<CapsuleCollider>();
+        if (trapReceiver == null) trapReceiver = gameObject.AddComponent<CapsuleCollider>();
+        trapReceiver.isTrigger = true;
+        trapReceiver.center = Vector3.up * 0.9f;
+        trapReceiver.height = 1.8f;
+        trapReceiver.radius = 0.55f;
+        var trapBody = GetComponent<Rigidbody>();
+        if (trapBody == null) trapBody = gameObject.AddComponent<Rigidbody>();
+        trapBody.isKinematic = true;
+        trapBody.useGravity = false;
         Debug.Log($"GiantGorillaChaser bound to {player.name}; spawned {renderers.Length} renderer(s) with grunt '{(gruntClip != null ? gruntClip.name : "MISSING")}' and footsteps muted.", this);
         return true;
     }
@@ -312,6 +325,29 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
 
+        if (IsBombStunned)
+        {
+            bombVerticalVelocity += player.BaseGravity * dt;
+            Vector3 position = transform.position;
+            position.y = Mathf.Max(bombGroundY, position.y + bombVerticalVelocity * dt);
+            transform.position = position;
+            return;
+        }
+        if (bombStunEndsAt > 0f)
+        {
+            bombStunEndsAt = 0f;
+            var position = transform.position;
+            position.y = bombGroundY;
+            transform.position = position;
+            if (gorillaAnimator != null)
+            {
+                gorillaAnimator.speed = 1f;
+                gorillaAnimator.CrossFadeInFixedTime("Base Layer.Run", 0.15f, 0, 0f);
+            }
+            currentGap = Mathf.Max(hitRevealGap, chaseTarget.position.z - position.z);
+            BeginRetreat();
+        }
+
         DetectRunnerImpacts();
         UpdateChaseTarget();
         UpdateVisibilityState(dt);
@@ -337,6 +373,20 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             nextObstacleCheck = Time.time + 0.08f;
             SmashBreakablesBehindPlayer(chaseTarget.position.z);
         }
+    }
+
+    public bool ApplyBombHit(float launchSpeed, float stunSeconds)
+    {
+        if (!initialized || !isActiveAndEnabled || health == null || health.IsRunOver || catchStarted || IsBombStunned) return false;
+        bombGroundY = transform.position.y;
+        bombVerticalVelocity = Mathf.Max(1f, launchSpeed);
+        float duration = Mathf.Max(stunSeconds, 2f * bombVerticalVelocity / Mathf.Max(0.1f, -player.BaseGravity) + 0.1f);
+        bombStunEndsAt = Time.time + duration;
+        laneVelocity = forwardVelocity = 0f;
+        visibility = VisibilityState.HitReveal;
+        SetGorillaVisible(true);
+        RunnerHitReaction.Play(gorillaAnimator, playerAnimation != null ? playerAnimation.HitClipLength : 1f, duration);
+        return true;
     }
 
     private void UpdateVisibilityState(float dt)
@@ -530,6 +580,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private void BeginCatchSequence()
     {
         if (catchStarted || catchSuppressed || !initialized || player == null || health == null) return;
+
+        bombStunEndsAt = 0f;
 
         catchStarted = true;
         chaseTarget = player.transform;
@@ -813,6 +865,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private void OnDisable()
     {
+        bombStunEndsAt = 0f;
         if (health != null && subscribedToHits)
         {
             health.HitTaken -= OnPlayerHit;

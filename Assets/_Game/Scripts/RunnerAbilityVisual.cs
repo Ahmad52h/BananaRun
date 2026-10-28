@@ -77,8 +77,8 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         var renderer = shieldShell.GetComponent<MeshRenderer>();
         if (renderer != null)
         {
-            shieldMaterial = PowerUpVisualUtility.CreateGlowMaterial(
-                new Color(0.28f, 0.88f, 1f, 0.2f));
+            shieldMaterial = PowerUpVisualUtility.CreateSoftShellMaterial(
+                new Color(0.72f, 0.82f, 0.76f, 0.13f));
             renderer.material = shieldMaterial;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
@@ -90,9 +90,9 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         lightObject.transform.localPosition = new Vector3(0f, 1.3f, 0f);
         shieldLight = lightObject.AddComponent<Light>();
         shieldLight.type = LightType.Point;
-        shieldLight.color = new Color(0.3f, 0.9f, 1f);
-        shieldLight.range = 3.8f;
-        shieldLight.intensity = 1.35f;
+        shieldLight.color = new Color(0.78f, 0.88f, 0.8f);
+        shieldLight.range = 3.2f;
+        shieldLight.intensity = 0.55f;
         shieldLight.shadows = LightShadows.None;
         shieldLight.enabled = false;
     }
@@ -227,7 +227,7 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         }
         if (shieldMaterial != null && shielded)
         {
-            Color color = new Color(0.28f, 0.88f, 1f, 0.16f + 0.06f * (0.5f + 0.5f * Mathf.Sin(Time.time * 4.5f + pulsePhase)));
+            Color color = new Color(0.72f, 0.82f, 0.76f, 0.11f + 0.03f * (0.5f + 0.5f * Mathf.Sin(Time.time * 4.5f + pulsePhase)));
             shieldMaterial.SetColor("_BaseColor", color);
             shieldMaterial.SetColor("_Color", color);
         }
@@ -237,9 +237,9 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
             bool flashing = Time.time < shieldFlashUntil;
             shieldLight.enabled = shielded || flashing;
             if (shielded)
-                shieldLight.intensity = 1.25f + 0.35f * Mathf.Sin(Time.time * 4.5f + pulsePhase);
+                shieldLight.intensity = 0.45f + 0.12f * Mathf.Sin(Time.time * 4.5f + pulsePhase);
             else if (flashing)
-                shieldLight.intensity = Mathf.Lerp(5f, 0f,
+                shieldLight.intensity = Mathf.Lerp(1.8f, 0f,
                     Mathf.InverseLerp(shieldFlashUntil - 0.28f, shieldFlashUntil, Time.time));
         }
 
@@ -266,7 +266,7 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         if (shieldLight == null) return;
         shieldFlashUntil = Time.time + 0.28f;
         shieldLight.enabled = true;
-        shieldLight.intensity = 5f;
+        shieldLight.intensity = 1.8f;
     }
 
     private void OnDisable()

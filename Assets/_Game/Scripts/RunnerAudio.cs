@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>Scene-owned audio. Separate sources allow overlapping pickups over looping music.</summary>
@@ -11,6 +12,14 @@ public class RunnerAudio : MonoBehaviour
     [SerializeField] private AudioClip monkeyHurt;
     [SerializeField, Range(0f, 0.4f)] private float hurtVolume = 0.38f;
     private AudioSource hurtSource;
+    [Header("Bomb Cues")]
+    [SerializeField] private AudioClip bombDropSound;
+    [SerializeField] private AudioClip bombExplosionSound;
+    [SerializeField, Range(0f, 1f)] private float bombDropVolume = 0.45f;
+    [SerializeField, Range(0f, 1f)] private float bombExplosionVolume = 0.65f;
+    private AudioSource bombSource;
+    private Coroutine bombTransition;
+    private float lastBombExplosionAt = float.NegativeInfinity;
     [Header("Mix")]
     [SerializeField, Range(0f, 1f)] private float musicVolume = 0.22f;
     [SerializeField, Range(0f, 1f)] private float bananaVolume = 0.65f;
@@ -45,6 +54,13 @@ public class RunnerAudio : MonoBehaviour
         hurtSource = gameObject.AddComponent<AudioSource>();
         hurtSource.playOnAwake = false;
         hurtSource.spatialBlend = 0f;
+        // One voice for bomb cues: repeated impacts cannot stack and clip the output.
+        bombSource = gameObject.AddComponent<AudioSource>();
+        bombSource.playOnAwake = false;
+        bombSource.loop = false;
+        bombSource.spatialBlend = 0f;
+        bombSource.pitch = 1f;
+        bombSource.priority = 64;
     }
 
     private void Start()
@@ -109,6 +125,47 @@ public class RunnerAudio : MonoBehaviour
         hurtSource.PlayOneShot(monkeyHurt, Mathf.Min(hurtVolume, 0.38f));
     }
 
+    public void PlayBombDrop()
+    {
+        // A placement cue must never interrupt an explosion that is still audible.
+        if (bombSource != null && bombSource.isPlaying && bombSource.clip == bombExplosionSound) return;
+        PlayBombCue(bombDropSound, bombDropVolume);
+    }
+
+    public void PlayBombExplosion()
+    {
+        if (Time.unscaledTime - lastBombExplosionAt < 0.12f) return;
+        lastBombExplosionAt = Time.unscaledTime;
+        PlayBombCue(bombExplosionSound, bombExplosionVolume);
+    }
+
+    private void PlayBombCue(AudioClip clip, float volume)
+    {
+        if (!isActiveAndEnabled || bombSource == null || clip == null) return;
+        if (bombTransition != null) StopCoroutine(bombTransition);
+        bombTransition = StartCoroutine(SwitchBombCue(clip, volume));
+    }
+
+    private IEnumerator SwitchBombCue(AudioClip clip, float volume)
+    {
+        if (bombSource.isPlaying)
+        {
+            // Fade the current cue before replacement; hard cuts at a nonzero sample click.
+            float originalVolume = bombSource.volume;
+            for (float elapsed = 0; elapsed < 0.025f; elapsed += Time.unscaledDeltaTime)
+            {
+                bombSource.volume = originalVolume * (1f - Mathf.Clamp01(elapsed / 0.025f));
+                yield return null;
+            }
+        }
+        bombSource.Stop();
+        bombSource.clip = clip;
+        bombSource.volume = volume;
+        bombSource.pitch = 1f;
+        bombSource.Play();
+        bombTransition = null;
+    }
+
     public void PlayVictory(AudioClip clip)
     {
         if (!isActiveAndEnabled || effectsSource == null || clip == null) return;
@@ -128,6 +185,9 @@ public class RunnerAudio : MonoBehaviour
         if (musicSource != null) musicSource.Stop();
         if (effectsSource != null) effectsSource.Stop();
         if (hurtSource != null) hurtSource.Stop();
+        if (bombTransition != null) StopCoroutine(bombTransition);
+        bombTransition = null;
+        if (bombSource != null) bombSource.Stop();
     }
 
     private void OnDestroy()

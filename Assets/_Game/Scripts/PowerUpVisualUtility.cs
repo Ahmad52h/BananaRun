@@ -11,7 +11,7 @@ public static class PowerUpVisualUtility
             case PowerUpType.Bulldozer: return new Color(1f, 0.72f, 0.12f);
             case PowerUpType.Glider: return new Color(0.35f, 0.95f, 0.45f);
             case PowerUpType.Magnet: return new Color(0.72f, 0.38f, 1f);
-            case PowerUpType.Shield: return new Color(0.25f, 0.86f, 1f);
+            case PowerUpType.Shield: return new Color(0.72f, 0.82f, 0.76f);
             case PowerUpType.Thunder: return new Color(1f, 0.86f, 0.18f);
             default: return Color.white;
         }
@@ -50,6 +50,33 @@ public static class PowerUpVisualUtility
             material.color = color;
             material.renderQueue = (int)RenderQueue.Transparent;
         }
+        return material;
+    }
+
+    /// <summary>
+    /// Creates a transparent, lightly reflective shell for the Shield. URP/Lit
+    /// keeps the bubble neutral and readable under the jungle lighting, unlike
+    /// an unlit colour overlay. Falls back to the standard glow material.
+    /// </summary>
+    public static Material CreateSoftShellMaterial(Color color)
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null) return CreateGlowMaterial(color);
+
+        var material = new Material(shader) { name = "Runtime Shield Shell" };
+        material.SetFloat("_Surface", 1f);
+        material.SetFloat("_Blend", 0f);
+        material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        material.SetFloat("_ZWrite", 0f);
+        material.SetFloat("_Cull", (float)CullMode.Back);
+        material.SetFloat("_Metallic", 0f);
+        material.SetFloat("_Smoothness", 0.82f);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.DisableKeyword("_ALPHATEST_ON");
+        material.SetColor("_BaseColor", color);
+        material.SetColor("_Color", color);
+        material.renderQueue = (int)RenderQueue.Transparent;
         return material;
     }
 
