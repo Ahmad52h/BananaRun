@@ -211,9 +211,9 @@ MonoBehaviour:
   motion: 4
   visual: {fileID: 6757498758622783369}
   legs: []
-  speed: 2.2
+  speed: 2.9
   activationDistance: 30
-  travelLimit: 4
+  travelLimit: 5
   rollingRadius: 0.1
   rumble: {fileID: 0}
 --- !u!1 &5757520133828999811

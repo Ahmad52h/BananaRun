@@ -34,6 +34,7 @@ public class FinishGate : MonoBehaviour
 
     // Matches the longest dimension of Banana.prefab's visible model.
     private const float DeliveryBananaScale = 1.33f;
+    private const float MinimumDeliveryScale = 0.02f;
 
     private bool completed;
     public bool Completed => completed;
@@ -133,6 +134,18 @@ public class FinishGate : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(0.3f);
 
+        // Let the victory hops play before the results card covers the world.
+        var showcase = RaceCutsceneDirector.Instance;
+        if (showcase != null)
+        {
+            float guard = 0f;
+            while (showcase.VictoryShowcasePlaying && guard < 6f)
+            {
+                guard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+
         if (hud != null)
         {
             var race = FindAnyObjectByType<RaceProgressTracker>();
@@ -199,8 +212,9 @@ public class FinishGate : MonoBehaviour
                             bananaDeliveryVisual.transform.rotation);
 
                         visuals[i] = banana.transform;
-                        scales[i] =
-                            visuals[i].localScale * DeliveryBananaScale;
+                        scales[i] = SafeScale(
+                            visuals[i].localScale * DeliveryBananaScale,
+                            MinimumDeliveryScale);
                     }
 
                     Vector3 position =
@@ -216,12 +230,14 @@ public class FinishGate : MonoBehaviour
                         360f * Time.unscaledDeltaTime,
                         Space.World);
 
-                    // Shrink as the banana enters the basket.
+                    // Shrink as the banana enters the basket, but never all the
+                    // way to a zero/NaN scale that could produce a bad AABB.
                     float shrink =
                         Mathf.InverseLerp(0.8f, 1f, t);
 
-                    visuals[i].localScale =
-                        scales[i] * (1f - shrink);
+                    visuals[i].localScale = SafeScale(
+                        scales[i] * (1f - shrink),
+                        MinimumDeliveryScale);
                 }
 
                 elapsed += Time.unscaledDeltaTime;
@@ -236,5 +252,26 @@ public class FinishGate : MonoBehaviour
                     Destroy(visual.gameObject);
             }
         }
+    }
+
+    private static Vector3 SafeScale(Vector3 scale, float minimum)
+    {
+        if (!IsFinite(scale))
+            return Vector3.one * minimum;
+
+        return new Vector3(
+            Mathf.Max(minimum, Mathf.Abs(scale.x)),
+            Mathf.Max(minimum, Mathf.Abs(scale.y)),
+            Mathf.Max(minimum, Mathf.Abs(scale.z)));
+    }
+
+    private static bool IsFinite(Vector3 value)
+    {
+        return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+    }
+
+    private static bool IsFinite(float value)
+    {
+        return !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

@@ -10,7 +10,7 @@ public class RunnerHUD : MonoBehaviour
     [SerializeField] private TMP_Text heartsText;
     [SerializeField] private GameObject gameOverPanel;
     [Tooltip("Pause before the GAME OVER overlay so the gorilla catch can play.")]
-    [SerializeField, Min(0f)] private float gameOverRevealDelay = 1.6f;
+    [SerializeField, Min(0f)] private float gameOverRevealDelay = 2.1f;
     [SerializeField] private CoconutThrower coconutThrower;
     [SerializeField] private UnityEngine.UI.Button throwButton;
     [SerializeField] private UnityEngine.UI.Image[] heartIcons;

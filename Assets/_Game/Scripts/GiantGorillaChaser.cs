@@ -52,6 +52,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField, Min(0.1f)] private float retreatSeconds = 1.1f;
 
     [Header("Game Over Catch")]
+    [Tooltip("Beat where the monkey slumps before the gorilla surges in and grabs.")]
+    [SerializeField, Range(0f, 2f)] private float catchWindupSeconds = 0.65f;
     [Tooltip("Distance behind the player while the gorilla catches and lifts him.")]
     [SerializeField, Range(1.1f, 1.4f)] private float catchGap = 1.2f;
     [Tooltip("How quickly the gorilla surges into catch range on game over.")]
@@ -98,6 +100,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     private bool catchSuppressed;
     private float catchStartedAt;
     private float catchLockedAt;
+    private float catchWindupEndsAt;
+    private bool catchWindupComplete;
     private float lastGruntAt = -10f;
     private Vector3 catchOriginalPlayerPosition;
     private Quaternion catchOriginalPlayerRotation;
@@ -479,6 +483,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         catchWarningLogged = false;
         catchStartedAt = Time.time;
         catchLockedAt = 0f;
+        catchWindupEndsAt = Time.time + Mathf.Max(0f, catchWindupSeconds);
+        catchWindupComplete = catchWindupSeconds <= 0f;
         catchHand = null;
         playerNeck = null;
 
@@ -495,20 +501,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         nextObstacleCheck = Time.time;
         StopFootsteps();
 
-        if (gorillaAnimator != null)
-        {
-            gorillaAnimator.speed = 1f;
-            if (gorillaAnimator.isActiveAndEnabled)
-            {
-                if (!gorillaAnimator.GetCurrentAnimatorStateInfo(0).IsName("Run") &&
-                    !gorillaAnimator.IsInTransition(0))
-                {
-                    gorillaAnimator.Play("Run", 0, 0f);
-                }
-                gorillaAnimator.ResetTrigger(ResetRunTrigger);
-                gorillaAnimator.SetTrigger(CatchTrigger);
-            }
-        }
+        if (catchWindupComplete) PlayCatchAnimation();
+        else if (gorillaAnimator != null) gorillaAnimator.speed = 0.85f;
 
         // The lethal hit already fired HitTaken and played the grunt in the same
         // frame; do not restart it. If catch is entered any other way, play it.
@@ -516,10 +510,39 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         Debug.Log("GiantGorillaChaser: starting game-over catch.", this);
     }
 
+    private void PlayCatchAnimation()
+    {
+        if (gorillaAnimator == null) return;
+        gorillaAnimator.speed = 1f;
+        if (!gorillaAnimator.isActiveAndEnabled) return;
+        if (!gorillaAnimator.GetCurrentAnimatorStateInfo(0).IsName("Run") &&
+            !gorillaAnimator.IsInTransition(0))
+        {
+            gorillaAnimator.Play("Run", 0, 0f);
+        }
+        gorillaAnimator.ResetTrigger(ResetRunTrigger);
+        gorillaAnimator.SetTrigger(CatchTrigger);
+    }
+
     private void UpdateCatch(float dt)
     {
         if (dt <= 0f) return;
         if (footsteps != null && footsteps.isPlaying) footsteps.Stop();
+
+        if (!catchWindupComplete)
+        {
+            // The monkey slumps for a beat while the gorilla closes the last
+            // few metres, then the Catch clip starts on top of the monkey.
+            currentGap = Mathf.MoveTowards(currentGap, catchGap + 1.4f, catchApproachSpeed * 0.45f * dt);
+            FollowCatchTarget();
+            if (gorillaAnimator != null) gorillaAnimator.speed = 0.85f;
+            if (Time.time >= catchWindupEndsAt)
+            {
+                catchWindupComplete = true;
+                PlayCatchAnimation();
+            }
+            return;
+        }
 
         if (!catchLocked)
         {
@@ -681,6 +704,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         catchStarted = false;
         catchLocked = false;
         catchFrozen = false;
+        catchWindupComplete = false;
         catchWarningLogged = false;
         catchSuppressed = true;
         catchHand = null;
@@ -754,6 +778,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         catchStarted = false;
         catchLocked = false;
         catchFrozen = false;
+        catchWindupComplete = false;
         catchWarningLogged = false;
         if (wasCatching) catchSuppressed = true;
         catchHand = null;

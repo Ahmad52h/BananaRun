@@ -46,6 +46,14 @@ public static class ProgressiveDifficultyVerification
         }
     }
 
+    /// <summary>Batch entry point: loads Level01 first, then runs the normal Play Mode verification.</summary>
+    public static void BeginFromBatch()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+        EditorSceneManager.OpenScene("Assets/_Game/Scenes/Level01.unity", OpenSceneMode.Single);
+        Begin();
+    }
+
     [MenuItem("Tools/Banana Run/Verify Progressive Difficulty")]
     public static void Begin()
     {
@@ -300,8 +308,8 @@ public static class ProgressiveDifficultyVerification
                     if (i % 25 == 0) WriteReport("Speed at " + i + "%: " + speed.ToString("F3") + "\n");
                 }
                 Check(Mathf.Abs(last - motor.MaximumForwardSpeed) < 0.001f, "Smooth speed reaches its cap at the finish.");
-                Check(course.ReactionDistance / motor.MaximumForwardSpeed >= 0.95f + motor.LaneChangeDuration - 0.001f,
-                    "Maximum-speed transitions reserve at least 0.95 seconds of reaction time plus a complete lane change.");
+                Check(course.ReactionDistance / motor.MaximumForwardSpeed >= 0.8f + motor.LaneChangeDuration - 0.001f,
+                    "Maximum-speed transitions reserve at least 0.8 seconds of reaction time plus a complete lane change.");
                 Audit(course);
                 foreach (var range in new[] { new Vector2(0f, 0.35f), new Vector2(0.35f, 0.7f), new Vector2(0.7f, 1.01f) })
                 {
@@ -316,7 +324,7 @@ public static class ProgressiveDifficultyVerification
                 float earlyHazardSpeed = moving.EffectiveSpeed;
                 Vector3 originalPosition = motor.transform.position;
                 motor.transform.position = new Vector3(0, originalPosition.y, origin + progress.RunLength);
-                Check(moving.EffectiveSpeed > earlyHazardSpeed && moving.EffectiveSpeed <= earlyHazardSpeed * 1.3f,
+                Check(moving.EffectiveSpeed > earlyHazardSpeed && moving.EffectiveSpeed <= earlyHazardSpeed * 1.45f,
                     "Moving hazard speed scales gradually with the same difficulty.");
                 motor.transform.position = originalPosition;
                 // Generate fresh courses with varied seeds, no scenery/pickups, and audit actual collider bounds.

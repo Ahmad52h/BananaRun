@@ -24,18 +24,20 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField] private float gapStart = 610f;
     [SerializeField] private float gapEnd = 642f;
     [Tooltip("Lower bound of relative row-spacing jitter, normalized around the average of this pair. Not an absolute minimum gap.")]
-    [SerializeField, Min(8f)] private float minimumSpacing = 12f;
+    [SerializeField, Min(8f)] private float minimumSpacing = 10f;
     [Tooltip("Upper bound of relative row-spacing jitter, normalized around the average of this pair. Not an absolute maximum gap.")]
-    [SerializeField, Min(8f)] private float maximumSpacing = 20f;
+    [SerializeField, Min(8f)] private float maximumSpacing = 16f;
     [Header("Progressive patterns")]
-    [SerializeField, Min(8f)] private float easyObstacleSpacing = 18f;
-    [SerializeField, Min(8f)] private float hardObstacleSpacing = 12f;
-    [SerializeField, Range(0f, 1f)] private float easyDoubleObstacleChance = 0.5f;
-    [SerializeField, Range(0f, 1f)] private float hardDoubleObstacleChance = 0.92f;
-    [SerializeField, Range(0f, 1f)] private float easyLaneChangeChance = 0.3f;
-    [SerializeField, Range(0f, 1f)] private float hardLaneChangeChance = 0.6f;
-    [SerializeField, Range(0f, 1f)] private float easyStaggerChance = 0.2f;
-    [SerializeField, Range(0f, 1f)] private float hardStaggerChance = 0.7f;
+    [SerializeField, Min(8f)] private float easyObstacleSpacing = 15f;
+    [SerializeField, Min(8f)] private float hardObstacleSpacing = 9.5f;
+    [Tooltip("Forward offset between paired obstacles in a staggered row.")]
+    [SerializeField, Min(0f)] private float staggerDistance = 3.2f;
+    [SerializeField, Range(0f, 1f)] private float easyDoubleObstacleChance = 0.62f;
+    [SerializeField, Range(0f, 1f)] private float hardDoubleObstacleChance = 0.98f;
+    [SerializeField, Range(0f, 1f)] private float easyLaneChangeChance = 0.42f;
+    [SerializeField, Range(0f, 1f)] private float hardLaneChangeChance = 0.75f;
+    [SerializeField, Range(0f, 1f)] private float easyStaggerChance = 0.3f;
+    [SerializeField, Range(0f, 1f)] private float hardStaggerChance = 0.85f;
     [Header("Ability banana paths")]
     [Tooltip("Chance of an elevated reward arc after a green glider pickup.")]
     [SerializeField, Range(0f, 1f)] private float highBananaFrequency = 0.75f;
@@ -48,12 +50,12 @@ public class RunnerCourseGenerator : MonoBehaviour
     [SerializeField, Min(0f)] private float difficultyStartDistance = 90f;
     [Tooltip("Distance from this runner's start. Zero uses its full distance to the finish.")]
     [SerializeField, Min(0f)] private float maximumDifficultyDistance;
-    [SerializeField, Range(1f, 1.3f)] private float obstacleFrequencyMultiplier = 1.28f;
-    [SerializeField, Range(1f, 1.3f)] private float maxHazardSpeedMultiplier = 1.22f;
+    [SerializeField, Range(1f, 1.6f)] private float obstacleFrequencyMultiplier = 1.45f;
+    [SerializeField, Range(1f, 1.5f)] private float maxHazardSpeedMultiplier = 1.35f;
     [SerializeField, Range(0.65f, 1f)] private float powerUpFrequencyMultiplier = 0.85f;
-    [SerializeField, Range(0f, 1f)] private float earlyDynamicChance = 0.22f;
-    [SerializeField, Range(0f, 1f)] private float lateDynamicChance = 0.6f;
-    [SerializeField, Min(0.8f)] private float minimumReactionSeconds = 0.95f;
+    [SerializeField, Range(0f, 1f)] private float earlyDynamicChance = 0.3f;
+    [SerializeField, Range(0f, 1f)] private float lateDynamicChance = 0.78f;
+    [SerializeField, Min(0.8f)] private float minimumReactionSeconds = 0.8f;
     [SerializeField, Min(30f)] private float powerUpSpacing = 120f;
     [Header("Scenery")]
     [SerializeField] private GameObject[] sceneryPrefabs;
@@ -170,7 +172,7 @@ public class RunnerCourseGenerator : MonoBehaviour
             var first = ChooseObstacle(random, firstLane, safeLane, difficulty);
             var second = random.NextDouble() < Mathf.Lerp(easyDoubleObstacleChance, hardDoubleObstacleChance, difficulty)
                 ? ChooseObstacle(random, secondLane, safeLane, difficulty, first) : null;
-            float stagger = second != null && random.NextDouble() < Mathf.Lerp(easyStaggerChance, hardStaggerChance, difficulty) ? 2.5f : 0f;
+            float stagger = second != null && random.NextDouble() < Mathf.Lerp(easyStaggerChance, hardStaggerChance, difficulty) ? staggerDistance : 0f;
             bool peel = bananaPeelPrefab != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.14f, difficulty);
             bool droppingCoconut = fallingCoconutPrefab != null && sceneryPrefabs != null && sceneryPrefabs.Length > 0
                 && sceneryPrefabs[0] != null && random.NextDouble() < Mathf.Lerp(0.04f, 0.13f, difficulty);
@@ -371,13 +373,14 @@ public class RunnerCourseGenerator : MonoBehaviour
     {
         minimumSpacing = Mathf.Max(8f, minimumSpacing);
         maximumSpacing = Mathf.Max(minimumSpacing, maximumSpacing);
-        obstacleFrequencyMultiplier = Mathf.Clamp(obstacleFrequencyMultiplier, 1f, 1.3f);
-        maxHazardSpeedMultiplier = Mathf.Clamp(maxHazardSpeedMultiplier, 1f, 1.3f);
+        obstacleFrequencyMultiplier = Mathf.Clamp(obstacleFrequencyMultiplier, 1f, 1.6f);
+        maxHazardSpeedMultiplier = Mathf.Clamp(maxHazardSpeedMultiplier, 1f, 1.5f);
         powerUpFrequencyMultiplier = Mathf.Clamp(powerUpFrequencyMultiplier, 0.65f, 1f);
         minimumReactionSeconds = Mathf.Max(0.8f, minimumReactionSeconds);
         lateDynamicChance = Mathf.Max(earlyDynamicChance, lateDynamicChance);
         easyObstacleSpacing = Mathf.Max(8f, easyObstacleSpacing);
         hardObstacleSpacing = Mathf.Clamp(hardObstacleSpacing, 8f, easyObstacleSpacing);
+        staggerDistance = Mathf.Max(0f, staggerDistance);
         hardDoubleObstacleChance = Mathf.Max(easyDoubleObstacleChance, hardDoubleObstacleChance);
         hardLaneChangeChance = Mathf.Max(easyLaneChangeChance, hardLaneChangeChance);
         hardStaggerChance = Mathf.Max(easyStaggerChance, hardStaggerChance);

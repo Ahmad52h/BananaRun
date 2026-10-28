@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class CrateBreakEffect : MonoBehaviour
 {
+    private const float MinimumScale = 0.02f;
+
     [SerializeField, Min(0.1f)]
     private float lifetime = 0.8f;
 
@@ -26,7 +28,7 @@ public class CrateBreakEffect : MonoBehaviour
             Transform piece = transform.GetChild(i);
 
             pieces[i] = piece;
-            initialScales[i] = piece.localScale;
+            initialScales[i] = SafeScale(piece.localScale);
 
             Vector3 outward = piece.position - transform.position;
             outward.y = 0f;
@@ -53,8 +55,9 @@ public class CrateBreakEffect : MonoBehaviour
             return;
         }
 
-        float shrink = 1f - Mathf.InverseLerp(
-            lifetime * 0.6f, lifetime, age);
+        float shrink = Mathf.Max(
+            MinimumScale,
+            1f - Mathf.InverseLerp(lifetime * 0.6f, lifetime, age));
 
         for (int i = 0; i < pieces.Length; i++)
         {
@@ -66,7 +69,28 @@ public class CrateBreakEffect : MonoBehaviour
                 spins[i] * dt,
                 Space.World);
 
-            pieces[i].localScale = initialScales[i] * shrink;
+            pieces[i].localScale = SafeScale(initialScales[i] * shrink);
         }
+    }
+
+    private static Vector3 SafeScale(Vector3 scale)
+    {
+        if (!IsFinite(scale))
+            return Vector3.one;
+
+        return new Vector3(
+            Mathf.Max(MinimumScale, Mathf.Abs(scale.x)),
+            Mathf.Max(MinimumScale, Mathf.Abs(scale.y)),
+            Mathf.Max(MinimumScale, Mathf.Abs(scale.z)));
+    }
+
+    private static bool IsFinite(Vector3 value)
+    {
+        return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+    }
+
+    private static bool IsFinite(float value)
+    {
+        return !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

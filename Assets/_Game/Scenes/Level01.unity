@@ -6476,6 +6476,67 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 445958416}
   m_Mesh: {fileID: 4300000, guid: 6f37821204d733943b57ba1157021981, type: 2}
+--- !u!1 &446864414
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 446864416}
+  - component: {fileID: 446864415}
+  m_Layer: 0
+  m_Name: Race Cutscenes
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &446864415
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446864414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bdfd588b6828474e62e598b64ad290d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RaceCutsceneDirector
+  race: {fileID: 1270917962}
+  player: {fileID: 1177452967}
+  rival: {fileID: 1165912490}
+  finishGate: {fileID: 1345076920}
+  chaser: {fileID: 2100001002}
+  celebrationBasket: {fileID: 321236733}
+  victoryStartDelay: 0.35
+  victoryHops: 3
+  victoryHopDuration: 0.85
+  victoryHopHeight: 1.55
+  victoryTravel: 6.5
+  victoryBananasPerBurst: 10
+  victoryBannerHold: 2.7
+  defeatSitBlendSeconds: 0.55
+  defeatSitDrop: 0.55
+  defeatMaxSitSeconds: 2.4
+  defeatBannerHold: 2.2
+--- !u!4 &446864416
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446864414}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &458430113
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -22385,16 +22446,17 @@ MonoBehaviour:
   bananaPeelPrefab: {fileID: 8739428651796946694, guid: 87de218acd9018a4da0d20bfdd7519a1, type: 3}
   gapStart: 610
   gapEnd: 642
-  minimumSpacing: 12
-  maximumSpacing: 20
-  easyObstacleSpacing: 18
-  hardObstacleSpacing: 12
-  easyDoubleObstacleChance: 0.5
-  hardDoubleObstacleChance: 0.92
-  easyLaneChangeChance: 0.3
-  hardLaneChangeChance: 0.6
-  easyStaggerChance: 0.2
-  hardStaggerChance: 0.7
+  minimumSpacing: 10
+  maximumSpacing: 16
+  easyObstacleSpacing: 15
+  hardObstacleSpacing: 9.5
+  staggerDistance: 3.2
+  easyDoubleObstacleChance: 0.62
+  hardDoubleObstacleChance: 0.98
+  easyLaneChangeChance: 0.42
+  hardLaneChangeChance: 0.75
+  easyStaggerChance: 0.3
+  hardStaggerChance: 0.85
   highBananaFrequency: 0.75
   highBananaHeight: 4.7
   highBananaCount: 9
@@ -22402,12 +22464,12 @@ MonoBehaviour:
   progressSource: {fileID: 473393086}
   difficultyStartDistance: 90
   maximumDifficultyDistance: 0
-  obstacleFrequencyMultiplier: 1.28
-  maxHazardSpeedMultiplier: 1.22
+  obstacleFrequencyMultiplier: 1.45
+  maxHazardSpeedMultiplier: 1.35
   powerUpFrequencyMultiplier: 0.85
-  earlyDynamicChance: 0.22
-  lateDynamicChance: 0.6
-  minimumReactionSeconds: 0.95
+  earlyDynamicChance: 0.3
+  lateDynamicChance: 0.78
+  minimumReactionSeconds: 0.8
   powerUpSpacing: 120
   sceneryPrefabs:
   - {fileID: 875607934879135939, guid: 6162c1a5c630f0e4a879b9801a612448, type: 3}
@@ -24302,7 +24364,7 @@ MonoBehaviour:
   health: {fileID: 1177452969}
   heartsText: {fileID: 1595011774}
   gameOverPanel: {fileID: 440197948}
-  gameOverRevealDelay: 1.6
+  gameOverRevealDelay: 2.1
   coconutThrower: {fileID: 1177452970}
   throwButton: {fileID: 226067387}
   heartIcons:
@@ -35403,6 +35465,7 @@ MonoBehaviour:
   hitRevealSeconds: 3.5
   revealApproachSpeed: 24
   retreatSeconds: 1.1
+  catchWindupSeconds: 0.65
   catchGap: 1.2
   catchApproachSpeed: 30
   catchGrabTime: 0.45
@@ -36805,3 +36868,4 @@ SceneRoots:
   - {fileID: 2100001001}
   - {fileID: 1165912489}
   - {fileID: 1270917963}
+  - {fileID: 446864416}

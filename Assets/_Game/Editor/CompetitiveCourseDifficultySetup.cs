@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 /// <summary>Applies the competitive course profile through Unity's scene and prefab APIs.</summary>
 public static class CompetitiveCourseDifficultySetup
 {
-    private const string Folder = "Assets/_Game/Prefabs/Course/";
+    private const string CourseFolder = "Assets/_Game/Prefabs/Course/";
 
     [MenuItem("Tools/Banana Run/Increase Competitive Course Difficulty")]
     public static void Apply()
@@ -16,19 +16,26 @@ public static class CompetitiveCourseDifficultySetup
         var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
         if (EditorApplication.isPlayingOrWillChangePlaymode || scene.name != "Level01")
             throw new InvalidOperationException("Open Level01 in Edit Mode before applying course difficulty.");
-        var course = Object.FindFirstObjectByType<RunnerCourseGenerator>();
+        var course = Object.FindAnyObjectByType<RunnerCourseGenerator>();
         if (course == null) throw new InvalidOperationException("Level01 requires a course generator.");
 
-        var log = MovingVariant("LogHurdle", "RollingLog", DynamicRunnerHazard.Motion.RollingLog, 3.1f, 5f, 0.4f);
-        var barrier = MovingVariant("HighSlideBeam", "MovingSlideBarrier", DynamicRunnerHazard.Motion.Barrier, 2.2f, 4f, 0f);
+        // Faster, longer-travelling hazards turn each row into a real decision.
+        var log = TuneHazard(CourseFolder + "RollingLog.prefab", CourseFolder + "LogHurdle.prefab",
+            "RollingLog", DynamicRunnerHazard.Motion.RollingLog, 3.9f, 6.5f, 0.4f);
+        var barrier = TuneHazard(CourseFolder + "MovingSlideBarrier.prefab", CourseFolder + "HighSlideBeam.prefab",
+            "MovingSlideBarrier", DynamicRunnerHazard.Motion.Barrier, 2.9f, 5f, 0f);
+
         var data = new SerializedObject(course);
-        Set(data, "easyObstacleSpacing", 18f); Set(data, "hardObstacleSpacing", 12f);
-        Set(data, "easyDoubleObstacleChance", 0.5f); Set(data, "hardDoubleObstacleChance", 0.92f);
-        Set(data, "easyLaneChangeChance", 0.3f); Set(data, "hardLaneChangeChance", 0.6f);
-        Set(data, "easyStaggerChance", 0.2f); Set(data, "hardStaggerChance", 0.7f);
-        Set(data, "obstacleFrequencyMultiplier", 1.28f); Set(data, "maxHazardSpeedMultiplier", 1.22f);
-        Set(data, "earlyDynamicChance", 0.22f); Set(data, "lateDynamicChance", 0.6f);
-        Set(data, "minimumReactionSeconds", 0.95f);
+        // Tighter jitter band, denser rows and a shorter maximum-speed reaction floor.
+        Set(data, "minimumSpacing", 10f); Set(data, "maximumSpacing", 16f);
+        Set(data, "easyObstacleSpacing", 15f); Set(data, "hardObstacleSpacing", 9.5f);
+        Set(data, "staggerDistance", 3.2f);
+        Set(data, "easyDoubleObstacleChance", 0.62f); Set(data, "hardDoubleObstacleChance", 0.98f);
+        Set(data, "easyLaneChangeChance", 0.42f); Set(data, "hardLaneChangeChance", 0.75f);
+        Set(data, "easyStaggerChance", 0.3f); Set(data, "hardStaggerChance", 0.85f);
+        Set(data, "obstacleFrequencyMultiplier", 1.45f); Set(data, "maxHazardSpeedMultiplier", 1.35f);
+        Set(data, "earlyDynamicChance", 0.3f); Set(data, "lateDynamicChance", 0.78f);
+        Set(data, "minimumReactionSeconds", 0.8f);
         data.FindProperty("randomizeEachRun").boolValue = true;
         var palette = data.FindProperty("obstaclePrefabs");
         var prefabs = new List<GameObject>();
@@ -43,16 +50,34 @@ public static class CompetitiveCourseDifficultySetup
         data.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("Competitive course: denser progressive pairs, staggered rows, rolling logs and moving slide barriers.");
+        Debug.Log("Competitive course: denser pairs and staggers, faster rolling logs and moving slide barriers.");
     }
 
     private static void Set(SerializedObject data, string name, float value) => data.FindProperty(name).floatValue = value;
 
-    private static GameObject MovingVariant(string sourceName, string name, DynamicRunnerHazard.Motion kind,
+    /// <summary>Tunes the authored hazard in place, or builds it from its source on a fresh checkout.</summary>
+    private static GameObject TuneHazard(string prefabPath, string sourcePath, string name,
+        DynamicRunnerHazard.Motion kind, float speed, float travel, float pivotHeight)
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        var hazard = prefab != null ? prefab.GetComponent<DynamicRunnerHazard>() : null;
+        if (hazard == null)
+            return MovingVariant(sourcePath, name, kind, speed, travel, pivotHeight);
+
+        var data = new SerializedObject(hazard);
+        Set(data, "speed", speed);
+        Set(data, "travelLimit", travel);
+        Set(data, "activationDistance", 30f);
+        data.ApplyModifiedPropertiesWithoutUndo();
+        AssetDatabase.SaveAssetIfDirty(prefab);
+        return prefab;
+    }
+
+    private static GameObject MovingVariant(string sourcePath, string name, DynamicRunnerHazard.Motion kind,
         float speed, float travel, float pivotHeight)
     {
-        var source = AssetDatabase.LoadAssetAtPath<GameObject>(Folder + sourceName + ".prefab");
-        if (source == null) throw new InvalidOperationException("Missing course obstacle " + sourceName);
+        var source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
+        if (source == null) throw new InvalidOperationException("Missing course obstacle " + sourcePath);
         var root = Object.Instantiate(source);
         try
         {
@@ -75,7 +100,7 @@ public static class CompetitiveCourseDifficultySetup
             Set(data, "speed", speed); Set(data, "travelLimit", travel);
             Set(data, "activationDistance", 30f); Set(data, "rollingRadius", Mathf.Max(0.1f, pivotHeight));
             data.ApplyModifiedPropertiesWithoutUndo();
-            return PrefabUtility.SaveAsPrefabAsset(root, Folder + name + ".prefab");
+            return PrefabUtility.SaveAsPrefabAsset(root, CourseFolder + name + ".prefab");
         }
         finally { Object.DestroyImmediate(root); }
     }
