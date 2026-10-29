@@ -111,7 +111,7 @@ public sealed class RivalRunner : MonoBehaviour
     public event System.Action Impacted;
     private float RunningPace => player == null ? 0f :
         player.SpeedAtDifficulty(course != null ? course.DifficultyAt(transform.position.z) : 0f) * paceMultiplier;
-    public float CurrentSpeed => HasFinished || recoveringFall || IsProjectileStunned ? 0f :
+    public float CurrentSpeed => RaceStartSequence.IsHolding || HasFinished || recoveringFall || IsProjectileStunned ? 0f :
         RunningPace * (IsStumbling ? setbackMultiplier : 1f) * (HasThunder ? PowerUpManager.ThunderSpeedMultiplier : 1f);
     private float EffectiveLookAhead => Mathf.Max(lookAhead, detectionRange);
 
@@ -150,6 +150,11 @@ public sealed class RivalRunner : MonoBehaviour
 
     private void Start()
     {
+        if (RaceStartSequence.IsHolding && animator != null)
+        {
+            animationState = IdleState;
+            animator.Play(IdleState, 0, 0f);
+        }
         if (!riverVineConfigured) ConfigureRiverVinesFromScene();
     }
 
@@ -176,6 +181,7 @@ public sealed class RivalRunner : MonoBehaviour
 
     private void Update()
     {
+        if (RaceStartSequence.IsHolding) { Animate(IdleState); return; }
         UpdateGiantScale();
         if (player == null || controller == null || !controller.enabled || Time.deltaTime <= 0f) return;
         if (HasFinished) { Animate(IdleState); return; }
@@ -225,6 +231,14 @@ public sealed class RivalRunner : MonoBehaviour
         ConsiderBombDrop();
         TrackForwardProgress(transform.position.z - previousZ, dt);
         Animate(IsStumbling ? HitState : !controller.isGrounded ? JumpState : sliding ? SlideState : RunState);
+    }
+
+    public void PlayRaceStartRun()
+    {
+        verticalVelocity = -2f;
+        nextDecision = Time.time + 0.1f;
+        nextBombDrop = Time.time + bombDropMinInterval;
+        Animate(RunState);
     }
 
     /// <summary>

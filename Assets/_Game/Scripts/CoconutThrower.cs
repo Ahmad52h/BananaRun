@@ -32,6 +32,7 @@ public class CoconutThrower : MonoBehaviour
     public event System.Action<int> CountChanged;
 
     public bool CanThrow =>
+        !RaceStartSequence.IsHolding &&
         HasCoconut &&
         health != null &&
         !health.IsRunOver &&

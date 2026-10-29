@@ -24,6 +24,7 @@ public sealed class MonkeyFootstepDust : MonoBehaviour
 
     private CharacterController controller;
     private PlayerHealth health;
+    private RivalRunner rival;
     private SkinnedMeshRenderer feetRenderer;
     private Material generatedMaterial;
     private Texture2D generatedTexture;
@@ -35,6 +36,7 @@ public sealed class MonkeyFootstepDust : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
         health = GetComponent<PlayerHealth>();
+        rival = GetComponent<RivalRunner>();
         feetRenderer = GetComponentInChildren<SkinnedMeshRenderer>(true);
 
         if (dustSystem == null)
@@ -63,7 +65,7 @@ public sealed class MonkeyFootstepDust : MonoBehaviour
             return;
 
         bool isGrounded = controller != null && controller.isGrounded;
-        bool isGameOver = health != null && health.IsRunOver;
+        bool isGameOver = RaceStartSequence.IsHolding || (health != null && health.IsRunOver) || (rival != null && rival.HasFinished);
         bool shouldEmit = isGrounded && !isGameOver;
 
         if (isGrounded)
@@ -100,6 +102,14 @@ public sealed class MonkeyFootstepDust : MonoBehaviour
         dustSystem.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         groundStateKnown = false;
         wasGrounded = false;
+    }
+
+    public void EmitStartPuff()
+    {
+        if (dustSystem == null) return;
+        PositionAtFeet();
+        if (!dustSystem.isPlaying) dustSystem.Play();
+        dustSystem.Emit(18);
     }
 
     private ParticleSystem FindExistingDustSystem()

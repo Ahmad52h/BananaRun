@@ -62,6 +62,12 @@ public sealed class RivalProjectileThrower : MonoBehaviour
 
     private void Update()
     {
+        if (RaceStartSequence.IsHolding)
+        {
+            nextThrow = Time.time + firstThrowDelay;
+            CancelHeld();
+            return;
+        }
         if (!CanPrepare) { CancelHeld(); return; }
         if (held == null)
         {

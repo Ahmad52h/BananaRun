@@ -124,6 +124,49 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private bool IsVisibleWindow => visibility == VisibilityState.HitReveal;
 
+    private bool startingIntimidation;
+    private float startingRoarAt = -100f;
+    public bool IsStartingIntimidation => startingIntimidation;
+
+    public void BeginStartingIntimidation()
+    {
+        if (!TryInitialize()) return;
+        startingIntimidation = true;
+        visibility = VisibilityState.HitReveal;
+        currentGap = 4.5f;
+        transform.position = player.transform.position - Vector3.forward * currentGap - Vector3.right * 2.6f;
+        SetGorillaVisible(true);
+        gorillaAnimator.speed = 1f;
+        gorillaAnimator.Play("Base Layer.StartIdle", 0, 0f);
+    }
+
+    public void PlayStartingRoar()
+    {
+        if (!startingIntimidation) return;
+        startingRoarAt = Time.time;
+        if (voice != null && gruntClip != null) voice.PlayOneShot(gruntClip, 0.75f);
+    }
+
+    public void EndStartingIntimidation()
+    {
+        if (!startingIntimidation) return;
+        startingIntimidation = false;
+        gorillaAnimator.CrossFadeInFixedTime("Base Layer.Run", 0.15f, 0, 0f);
+        gorillaAnimator.speed = 1f;
+        BeginRetreat();
+    }
+
+    private void PoseStartingRoar()
+    {
+        if (gorillaAnimator == null || !gorillaAnimator.isHuman) return;
+        float age = Time.time - startingRoarAt;
+        float weight = Mathf.Sin(Mathf.Clamp01(age / 1.5f) * Mathf.PI);
+        var chest = gorillaAnimator.GetBoneTransform(HumanBodyBones.Chest);
+        var head = gorillaAnimator.GetBoneTransform(HumanBodyBones.Head);
+        if (chest != null) chest.localRotation *= Quaternion.Euler(-12f * weight, 0f, 0f);
+        if (head != null) head.localRotation *= Quaternion.Euler(-18f * weight, 0f, 0f);
+    }
+
     private void Awake()
     {
         TryInitialize();
@@ -262,7 +305,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     {
         if (!initialized) return;
         SubscribeToHits();
-        HideImmediately();
+        if (!startingIntimidation) HideImmediately();
     }
 
     private void Start()
@@ -274,7 +317,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             return;
         }
         SubscribeToHits();
-        HideImmediately();
+        if (!startingIntimidation) HideImmediately();
     }
 
     private void SubscribeToHits()
@@ -295,6 +338,8 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (startingIntimidation) { PoseStartingRoar(); return; }
+        if (RaceStartSequence.IsHolding) return;
         if (player == null || health == null || !player.gameObject.activeInHierarchy)
         {
             StopAudio();

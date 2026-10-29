@@ -36,6 +36,15 @@ public class RunnerAnimation : MonoBehaviour
     private PlayerHealth health;
 
     private static readonly int RunState = Animator.StringToHash("Base Layer.Run");
+    private static readonly int WarmupState = Animator.StringToHash("Base Layer.Warming up");
+
+    public void PlayRaceStartRun()
+    {
+        if (animator == null) return;
+        animator.speed = 1f;
+        ChangeState(RunState, 0.12f);
+        wasGrounded = true;
+    }
     private static readonly int JumpState = Animator.StringToHash("Base Layer.Jump");
     private static readonly int IdleState = Animator.StringToHash("Base Layer.Idle");
     private static readonly int SlideState = Animator.StringToHash("Base Layer.Slide");
@@ -217,14 +226,19 @@ public class RunnerAnimation : MonoBehaviour
             return;
         }
 
-        currentState = RunState;
+        currentState = RaceStartSequence.IsHolding ? WarmupState : RunState;
         wasGrounded = controller.isGrounded;
-        animator.Play(RunState, 0, 0f);
+        animator.Play(currentState, 0, 0f);
     }
 
     private void Update()
     {
         if (animator == null || health == null || motor == null || controller == null) return;
+        if (RaceStartSequence.IsHolding)
+        {
+            ChangeState(WarmupState, 0.1f);
+            return;
+        }
         if (frozen) return;
         if (health.HasFailed)
         {

@@ -90,6 +90,7 @@ public class RunnerInput : MonoBehaviour
 
     private void Update()
     {
+        if (RaceStartSequence.IsHolding) { trackingSwipe = false; return; }
         if (left.WasPressedThisFrame())
             motor.ChangeLane(-1);
 

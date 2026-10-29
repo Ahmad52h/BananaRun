@@ -104,7 +104,7 @@ public class RunnerMotor : MonoBehaviour
     {
         get
         {
-            if (IsStunned) return 0f;
+            if (RaceStartSequence.IsHolding || IsStunned) return 0f;
             if (difficultyStartupComplete && difficultySource == null && !warnedMissingDifficultySource)
             {
                 Debug.LogWarning("RunnerMotor has no difficulty generator; CurrentSpeed is using baseline difficulty.", this);
@@ -146,6 +146,7 @@ public class RunnerMotor : MonoBehaviour
 
     private void Update()
     {
+        if (RaceStartSequence.IsHolding) return;
         if (controller == null || !controller.enabled) return;
         float deltaTime = Time.deltaTime;
 
@@ -217,7 +218,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void ChangeLane(int direction)
 {
-    if (!isActiveAndEnabled || IsLaneLocked || IsStunned)
+    if (RaceStartSequence.IsHolding || !isActiveAndEnabled || IsLaneLocked || IsStunned)
         return;
 
     int oldLane = currentLane;
@@ -238,7 +239,7 @@ public class RunnerMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (!isActiveAndEnabled || IsStunned || controller == null || !controller.enabled || sliding || !controller.isGrounded)
+        if (RaceStartSequence.IsHolding || !isActiveAndEnabled || IsStunned || controller == null || !controller.enabled || sliding || !controller.isGrounded)
             return;
 
         gliderJump = powerUps != null && powerUps.IsActive(PowerUpType.Glider);
@@ -248,7 +249,7 @@ public class RunnerMotor : MonoBehaviour
 
     public bool Slide()
     {
-        if (!isActiveAndEnabled || IsStunned || sliding || IsLaneLocked || !controller.enabled)
+        if (RaceStartSequence.IsHolding || !isActiveAndEnabled || IsStunned || sliding || IsLaneLocked || !controller.enabled)
             return false;
 
         // إذا كان القرد في الهواء وضغطت زحلقة، ينزل بسرعة للأرض ويتزحلق

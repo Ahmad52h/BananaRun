@@ -23,6 +23,7 @@ public class FallingCoconutSpawner : MonoBehaviour
 
     private void Update()
     {
+        if (RaceStartSequence.IsHolding) return;
         if (player == null || hazardPrefab == null || Time.time < nextDrop) return;
         if (Mathf.Abs(player.transform.position.z - transform.position.z) > activationRange) return;
         if (!player.isActiveAndEnabled) return;

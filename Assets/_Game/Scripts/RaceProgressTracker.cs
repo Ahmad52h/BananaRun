@@ -81,6 +81,7 @@ public sealed class RaceProgressTracker : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (RaceStartSequence.IsHolding) { previousTime = Time.time; return; }
         // Existing hits already slow the motor. Slips also need a distance penalty in a race.
         bool stumbling = playerAnimation != null && playerAnimation.IsReactingToHit;
         if (stumbling && !playerWasStumbling && playerHealth != null && !playerHealth.IsRunOver)

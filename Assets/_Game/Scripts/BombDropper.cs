@@ -20,7 +20,7 @@ public sealed class BombDropper : MonoBehaviour
     public int MaxBombs => maxBombs;
     public RottenBananaBomb TrapPrefab => trapPrefab;
     public event System.Action<int> CountChanged;
-    public bool CanDrop => isActiveAndEnabled && CurrentBombs > 0 && trapPrefab != null &&
+    public bool CanDrop => !RaceStartSequence.IsHolding && isActiveAndEnabled && CurrentBombs > 0 && trapPrefab != null &&
         health != null && !health.IsRunOver && !health.IsProjectileStunned &&
         motor != null && motor.isActiveAndEnabled && Time.timeScale > 0f && Time.time >= nextDrop &&
         (animationController == null || (!animationController.IsReactingToHit && !animationController.IsVineControlled));
