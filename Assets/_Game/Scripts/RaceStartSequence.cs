@@ -107,6 +107,7 @@ public sealed class RaceStartSequence : MonoBehaviour
         isRaceStarted = true;
         ReleasedAt = Time.time;
         gate?.Open();
+        player.BeginRaceRun();
         player.ResetVerticalVelocity();
         player.GetComponent<RunnerAnimation>()?.PlayRaceStartRun();
         rival?.PlayRaceStartRun();

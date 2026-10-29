@@ -44,8 +44,9 @@ public sealed class MainMenuController : MonoBehaviour
     private IEnumerator FadeIn()
     {
         fade.blocksRaycasts = true;
-        for (float t = 0; t < 0.3f; t += Time.unscaledDeltaTime)
+        for (float t = 0; t < 0.3f && !loading; t += Time.unscaledDeltaTime)
         { fade.alpha = 1f - t / 0.3f; yield return null; }
+        if (loading) yield break;
         fade.alpha = 0f;
         fade.blocksRaycasts = false;
     }
@@ -73,9 +74,29 @@ public sealed class MainMenuController : MonoBehaviour
         playButton.interactable = false;
         fade.blocksRaycasts = true;
         SettingsPanelController.Save();
-        for (float t = 0; t < 0.25f; t += Time.unscaledDeltaTime)
-        { fade.alpha = t / 0.25f; yield return null; }
-        fade.alpha = 1f;
+
+        // The diorama owns the exit beat: gorilla lunge, monkeys sprint, camera
+        // push. Only start fading once most of that is on screen, then finish the
+        // fade on the same 0.8 s beat so the gameplay load feels continuous.
+        if (MainMenuDiorama.BeginExitTransition())
+        {
+            float exitSeconds = MainMenuDiorama.ExitSeconds;
+            float fadeStart = exitSeconds * 0.62f;
+            float elapsed = 0f;
+            while (elapsed < exitSeconds)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                fade.alpha = Mathf.InverseLerp(fadeStart, exitSeconds, elapsed);
+                yield return null;
+            }
+            fade.alpha = 1f;
+        }
+        else
+        {
+            for (float t = 0; t < 0.25f; t += Time.unscaledDeltaTime)
+            { fade.alpha = t / 0.25f; yield return null; }
+            fade.alpha = 1f;
+        }
 
         // LoadSceneAsync is cooperative; yield its operation instead of
         // spinning or doing synchronous scene setup here.

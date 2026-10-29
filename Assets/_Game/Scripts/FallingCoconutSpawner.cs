@@ -16,7 +16,7 @@ public class FallingCoconutSpawner : MonoBehaviour
         player = runner;
         hazardPrefab = prefab;
         lane = Mathf.Clamp(targetLane, -1, 1);
-        centerX = runner != null ? runner.transform.position.x : 0f;
+        centerX = runner != null ? runner.CenterX : 0f;
     }
 
     private void Start() => nextDrop = Time.time + Random.Range(0.3f, interval);

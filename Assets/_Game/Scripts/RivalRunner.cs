@@ -131,7 +131,7 @@ public sealed class RivalRunner : MonoBehaviour
         if (bombSource != null) bombTrapPrefab = bombSource.TrapPrefab;
         CurrentBombs = Mathf.Clamp(startingBombs, 0, maxBombs);
         lastGroundedPosition = transform.position;
-        centerX = player != null ? player.transform.position.x : transform.position.x;
+        centerX = player != null ? player.CenterX : transform.position.x;
         if (player != null)
         {
             lane = Mathf.Clamp(Mathf.RoundToInt((transform.position.x - centerX) / player.LaneDistance), -1, 1);

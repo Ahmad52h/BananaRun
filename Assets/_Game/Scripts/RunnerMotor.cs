@@ -14,6 +14,8 @@ public class RunnerMotor : MonoBehaviour
     private bool warnedRejectedDifficultySource;
 
     [Header("Lanes")]
+    [Tooltip("World X of the true road/track center. Never use the side-by-side countdown position.")]
+    [SerializeField] private float trackCenterX = 0f;
     [SerializeField, Min(0.1f)] private float laneDistance = 2.2f;
     [SerializeField, Min(0.1f)] private float laneChangeSpeed = 12f;
 
@@ -64,6 +66,8 @@ public class RunnerMotor : MonoBehaviour
         currentLane = Mathf.Clamp(Mathf.RoundToInt((transform.position.x - centerX) / laneDistance), -1, 1);
     }
 
+    /// <summary>True road center. The player may stand off-center for the countdown, but lanes never move with it.</summary>
+    public float CenterX => trackCenterX;
     public float LaneDistance => laneDistance;
     public int ActiveLane => currentLane;
     public float ActiveLaneWorldX => centerX + currentLane * laneDistance;
@@ -137,12 +141,23 @@ public class RunnerMotor : MonoBehaviour
         standingCenter = controller.center;
         standingRadius = controller.radius;
 
-        // The starting position defines the center lane.
-        centerX = transform.position.x;
+        // Lanes are fixed to the road, never to the countdown's side-by-side
+        // starting offset. The runner slides back onto lane 0 after GO.
+        centerX = trackCenterX;
         currentLane = 0;
     }
 
     private void Start() => difficultyStartupComplete = true;
+
+    /// <summary>
+    /// Called on GO. Re-asserts the true road grid and lets Update smoothly
+    /// slide the runner from the off-center countdown spot into the center lane.
+    /// </summary>
+    public void BeginRaceRun()
+    {
+        centerX = trackCenterX;
+        currentLane = 0;
+    }
 
     private void Update()
     {

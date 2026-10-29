@@ -11,8 +11,6 @@ public class RunnerCamera : MonoBehaviour
     [SerializeField] private bool enableDynamicCameraTilt = true;
     [Tooltip("In the final 15% of the course, lift and frame the camera toward the finish arch and banana basket.")]
     [SerializeField] private bool enableApproachZoom = true;
-    [Tooltip("Blend ambient and directional lighting through morning, mid-jungle, and golden finish phases.")]
-    [SerializeField] private bool enableZoneLighting = true;
     [Header("Dynamic Camera Tilt")]
     [SerializeField, Range(0f, 5f)] private float maxCameraTilt = 1.8f;
     [SerializeField, Min(0.01f)] private float cameraTiltSmoothTime = 0.18f;
@@ -59,18 +57,6 @@ public class RunnerCamera : MonoBehaviour
     private Transform celebrationBasket;
     private Vector3 approachLookPoint;
     private bool approachLookPointReady;
-    private bool lightingCaptured;
-    private bool lightingApplied;
-    private float zoneBlend;
-    private Color originalAmbientLight;
-    private Color originalAmbientSky;
-    private Color originalAmbientEquator;
-    private Color originalAmbientGround;
-    private float originalAmbientIntensity;
-    private UnityEngine.Rendering.AmbientMode originalAmbientMode;
-    private Light sun;
-    private Color originalSunColor;
-    private float originalSunIntensity;
     private Camera view;
     private PowerUpManager powers;
     private RunnerMotor motor;
@@ -152,25 +138,6 @@ public class RunnerCamera : MonoBehaviour
         if (t >= 1f) raceIntroReturning = false;
     }
 
-    private static readonly Color MorningSky = new Color(0.58f, 0.75f, 0.78f);
-    private static readonly Color MorningEquator = new Color(0.48f, 0.62f, 0.36f);
-    private static readonly Color MorningGround = new Color(0.31f, 0.35f, 0.22f);
-    private static readonly Color MorningSun = new Color(1f, 0.94f, 0.78f);
-    private static readonly Color MidSky = new Color(0.40f, 0.57f, 0.50f);
-    private static readonly Color MidEquator = new Color(0.30f, 0.46f, 0.22f);
-    private static readonly Color MidGround = new Color(0.20f, 0.28f, 0.13f);
-    private static readonly Color MidSun = new Color(0.86f, 0.94f, 0.68f);
-    private static readonly Color GoldenSky = new Color(0.70f, 0.55f, 0.35f);
-    private static readonly Color GoldenEquator = new Color(0.58f, 0.43f, 0.22f);
-    private static readonly Color GoldenGround = new Color(0.33f, 0.26f, 0.13f);
-    private static readonly Color GoldenSun = new Color(1f, 0.70f, 0.36f);
-    private const float MorningAmbientIntensity = 1f;
-    private const float MidAmbientIntensity = 0.92f;
-    private const float GoldenAmbientIntensity = 1.08f;
-    private const float MorningSunIntensity = 1.15f;
-    private const float MidSunIntensity = 1f;
-    private const float GoldenSunIntensity = 1.12f;
-
     private void Start()
     {
         if (target == null) { Debug.LogError("RunnerCamera: Assign Player to Target.", this); enabled = false; return; }
@@ -190,7 +157,8 @@ public class RunnerCamera : MonoBehaviour
         footsteps.playOnAwake = false;
         footsteps.spatialBlend = 0f;
         footsteps.volume = 0.75f;
-        trackCenterX = target.position.x;
+        // The road center comes from the runner, not the countdown's side-by-side X.
+        trackCenterX = motor != null ? motor.CenterX : target.position.x;
         groundReferenceY = target.position.y;
         smoothX = trackCenterX + offset.x;
         baselineRotation = transform.rotation;
@@ -201,7 +169,6 @@ public class RunnerCamera : MonoBehaviour
         celebrationBasket = FindSceneTransform("Celebration Banana Basket");
         approachLookPoint = ComputeApproachLookPoint();
         approachLookPointReady = true;
-        CaptureLighting();
     }
 
     private static LevelProgressHUD FindProgressSource(Transform player)
@@ -260,7 +227,6 @@ public class RunnerCamera : MonoBehaviour
         float progress = CurrentProgress01();
         UpdateApproach(progress, dt);
         UpdateDynamicTilt(targetX, dt);
-        UpdateZoneLighting(progress);
 
         if (view != null)
         {
@@ -417,102 +383,6 @@ public class RunnerCamera : MonoBehaviour
         return bounds.center;
     }
 
-    private void CaptureLighting()
-    {
-        originalAmbientMode = RenderSettings.ambientMode;
-        originalAmbientLight = RenderSettings.ambientLight;
-        originalAmbientSky = RenderSettings.ambientSkyColor;
-        originalAmbientEquator = RenderSettings.ambientEquatorColor;
-        originalAmbientGround = RenderSettings.ambientGroundColor;
-        originalAmbientIntensity = RenderSettings.ambientIntensity;
-        sun = RenderSettings.sun;
-        if (sun == null)
-        {
-            foreach (Light candidate in FindObjectsByType<Light>(FindObjectsInactive.Exclude))
-            {
-                if (candidate.type == LightType.Directional)
-                {
-                    sun = candidate;
-                    break;
-                }
-            }
-        }
-        if (sun != null)
-        {
-            originalSunColor = sun.color;
-            originalSunIntensity = sun.intensity;
-        }
-        lightingCaptured = true;
-    }
-
-    private void UpdateZoneLighting(float progress)
-    {
-        if (!lightingCaptured) return;
-        zoneBlend = Mathf.MoveTowards(
-            zoneBlend, enableZoneLighting ? 1f : 0f, Time.unscaledDeltaTime / 0.8f);
-        if (zoneBlend <= 0f)
-        {
-            if (lightingApplied) RestoreLighting();
-            return;
-        }
-        ApplyZoneLighting(progress, zoneBlend);
-    }
-
-    private void ApplyZoneLighting(float progress, float blend)
-    {
-        float midBlend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.30f, 0.42f, progress));
-        float goldenBlend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.74f, 0.86f, progress));
-
-        Color sky = Color.Lerp(Color.Lerp(MorningSky, MidSky, midBlend), GoldenSky, goldenBlend);
-        Color equator = Color.Lerp(Color.Lerp(MorningEquator, MidEquator, midBlend), GoldenEquator, goldenBlend);
-        Color ground = Color.Lerp(Color.Lerp(MorningGround, MidGround, midBlend), GoldenGround, goldenBlend);
-        Color sunColor = Color.Lerp(Color.Lerp(MorningSun, MidSun, midBlend), GoldenSun, goldenBlend);
-        float ambientIntensity = Mathf.Lerp(
-            Mathf.Lerp(MorningAmbientIntensity, MidAmbientIntensity, midBlend),
-            GoldenAmbientIntensity, goldenBlend);
-        float sunIntensity = Mathf.Lerp(
-            Mathf.Lerp(MorningSunIntensity, MidSunIntensity, midBlend),
-            GoldenSunIntensity, goldenBlend);
-
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-        RenderSettings.ambientLight = Color.Lerp(originalAmbientLight, sky, blend);
-        RenderSettings.ambientSkyColor = Color.Lerp(originalAmbientSky, sky, blend);
-        RenderSettings.ambientEquatorColor = Color.Lerp(originalAmbientEquator, equator, blend);
-        RenderSettings.ambientGroundColor = Color.Lerp(originalAmbientGround, ground, blend);
-        RenderSettings.ambientIntensity = Mathf.Lerp(originalAmbientIntensity, ambientIntensity, blend);
-
-        if (sun != null)
-        {
-            sun.color = Color.Lerp(originalSunColor, sunColor, blend);
-            sun.intensity = Mathf.Lerp(originalSunIntensity, sunIntensity, blend);
-        }
-        lightingApplied = true;
-    }
-
-    private void RestoreLighting()
-    {
-        if (!lightingCaptured)
-        {
-            lightingApplied = false;
-            zoneBlend = 0f;
-            return;
-        }
-
-        RenderSettings.ambientMode = originalAmbientMode;
-        RenderSettings.ambientLight = originalAmbientLight;
-        RenderSettings.ambientSkyColor = originalAmbientSky;
-        RenderSettings.ambientEquatorColor = originalAmbientEquator;
-        RenderSettings.ambientGroundColor = originalAmbientGround;
-        RenderSettings.ambientIntensity = originalAmbientIntensity;
-        if (sun != null)
-        {
-            sun.color = originalSunColor;
-            sun.intensity = originalSunIntensity;
-        }
-        lightingApplied = false;
-        zoneBlend = 0f;
-    }
-
     /// <summary>
     /// Keeps the same horizontal world width as the authored 16:9 portrait view.
     /// hFov = 2 atan(tan(vFov / 2) * aspect), so the equivalent vertical FOV is
@@ -537,10 +407,6 @@ public class RunnerCamera : MonoBehaviour
             transform.rotation = baselineRotation;
             orientationApplied = false;
         }
-        if (gameObject.scene == UnityEngine.SceneManagement.SceneManager.GetActiveScene())
-            RestoreLighting();
-        else
-            zoneBlend = 0f;
         giantBlend = 0f;
         cameraTilt = 0f;
         cameraTiltVelocity = 0f;

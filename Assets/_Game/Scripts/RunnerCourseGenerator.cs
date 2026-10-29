@@ -151,7 +151,7 @@ public class RunnerCourseGenerator : MonoBehaviour
             return;
         }
         var random = new System.Random(randomizeEachRun ? Environment.TickCount : seed);
-        float centerX = player.transform.position.x;
+        float centerX = player.CenterX;
         float laneWidth = player.LaneDistance;
         float end = finishLine.position.z - finishApproach;
         float z = Mathf.Max(startDistance, player.transform.position.z + 20f);
@@ -373,15 +373,16 @@ public class RunnerCourseGenerator : MonoBehaviour
     private ObstacleProfile ChooseObstacle(System.Random random, int lane, int safeLane, float difficulty, ObstacleProfile paired = null)
     {
         bool dynamic = random.NextDouble() < Mathf.Lerp(earlyDynamicChance, lateDynamicChance, difficulty);
-        float safeX = safeLane * player.LaneDistance;
+        float centerX = player.CenterX;
+        float safeX = centerX + safeLane * player.LaneDistance;
         for (int pass = 0; pass < 2; pass++)
         {
             ObstacleProfile selected = null; int count = 0;
             foreach (var candidate in palette)
             {
                 if (candidate.dynamic != dynamic || candidate == paired) continue;
-                float left = lane * player.LaneDistance + candidate.bounds.min.x - playerRadius;
-                float right = lane * player.LaneDistance + candidate.bounds.max.x + playerRadius;
+                float left = centerX + lane * player.LaneDistance + candidate.bounds.min.x - playerRadius;
+                float right = centerX + lane * player.LaneDistance + candidate.bounds.max.x + playerRadius;
                 if (safeX >= left && safeX <= right) continue;
                 if (random.Next(++count) == 0) selected = candidate;
             }

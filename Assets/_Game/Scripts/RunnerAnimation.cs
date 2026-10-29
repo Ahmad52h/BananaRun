@@ -42,8 +42,15 @@ public class RunnerAnimation : MonoBehaviour
     {
         if (animator == null) return;
         animator.speed = 1f;
-        ChangeState(RunState, 0.12f);
+        animator.applyRootMotion = false;
+        // Rebind tears down and rebuilds the Animator's playable graph, so the
+        // "Warming up" pose cannot keep driving bones once the race begins.
+        animator.Rebind();
+        animator.Play(RunState, 0, 0f);
+        currentState = RunState;
         wasGrounded = true;
+        EnforceVisualRoot();
+        EnforceCenteredHips();
     }
     private static readonly int JumpState = Animator.StringToHash("Base Layer.Jump");
     private static readonly int IdleState = Animator.StringToHash("Base Layer.Idle");
@@ -67,7 +74,6 @@ public class RunnerAnimation : MonoBehaviour
         animator.SetBool("Sliding", false);
         animator.SetBool("VineAttached", true);
         animator.speed = 1f;
-        jumpCenterWeight = 0f;
         ChangeState(VineState, 0.16f);
     }
 
@@ -90,8 +96,10 @@ public class RunnerAnimation : MonoBehaviour
     private Transform hips;
     private Transform leftFoot;
     private Transform rightFoot;
-    private float centeredHipsZ;
-    private float jumpCenterWeight;
+    private Transform visualRoot;
+    private float visualRootLocalY;
+    private float restHipsX;
+    private float restHipsZ;
     private readonly RaycastHit[] groundHits = new RaycastHit[8];
     [System.Serializable]
     private class SoleContact
@@ -121,12 +129,18 @@ public class RunnerAnimation : MonoBehaviour
 
         animator.applyRootMotion = false;
         animator.speed = 1f;
+        visualRoot = animator.transform;
+        if (visualRoot != null) visualRootLocalY = visualRoot.localPosition.y;
         if (animator.isHuman)
         {
             hips = animator.GetBoneTransform(HumanBodyBones.Hips);
             leftFoot = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
             rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-            if (hips != null) centeredHipsZ = hips.localPosition.z;
+            if (hips != null)
+            {
+                restHipsX = hips.localPosition.x;
+                restHipsZ = hips.localPosition.z;
+            }
         }
         RefreshHitTrigger();
 
@@ -282,20 +296,11 @@ public class RunnerAnimation : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Runs after the Animator: the visual model can never be translated or
+        // rotated off the runner root by a clip, override graph or blend.
+        EnforceVisualRoot();
         if (hips == null || frozen || !animator.isActiveAndEnabled || (IsVineControlled && !vineReleased)) return;
-        // Apply after Animator evaluation. Keep the flip on the runner's axis and
-        // retain this correction through the landing blend to avoid a one-frame snap.
-        bool airborneFlip = !controller.isGrounded && currentState == JumpState;
-        jumpCenterWeight = airborneFlip ? 1f : Mathf.MoveTowards(jumpCenterWeight, 0f,
-            Time.deltaTime / Mathf.Max(0.01f, landBlendDuration));
-        Vector3 position = hips.localPosition;
-        if (jumpCenterWeight > 0f)
-        {
-            position.z = Mathf.Lerp(position.z, centeredHipsZ, jumpCenterWeight);
-            hips.localPosition = position;
-        }
-        else if (controller.isGrounded && currentState == RunState)
-            centeredHipsZ = position.z;
+        EnforceCenteredHips();
 
         var state = animator.GetCurrentAnimatorStateInfo(0);
         bool stumbling = IsReactingToHit || state.fullPathHash == HitState ||
@@ -328,6 +333,28 @@ public class RunnerAnimation : MonoBehaviour
             if (float.IsPositiveInfinity(soleY)) return;
         }
         hips.position += Vector3.up * (surfaceY - soleY);
+    }
+
+    /// <summary>Keeps the animated model rooted at the runner's transform origin.</summary>
+    private void EnforceVisualRoot()
+    {
+        if (visualRoot == null) return;
+        visualRoot.localPosition = new Vector3(0f, visualRootLocalY, 0f);
+        visualRoot.localRotation = Quaternion.identity;
+    }
+
+    /// <summary>
+    /// Locks the pelvis's lateral and forward offsets to the bind pose. The
+    /// warm-up clip can otherwise drag the whole body sideways while still
+    /// keeping the CharacterController and camera on the correct lane.
+    /// </summary>
+    private void EnforceCenteredHips()
+    {
+        if (hips == null) return;
+        Vector3 position = hips.localPosition;
+        position.x = restHipsX;
+        position.z = restHipsZ;
+        hips.localPosition = position;
     }
 
     private void StopThrowOverlay()
