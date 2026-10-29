@@ -20,7 +20,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
     private const float StageTop = 0.01f;
     private const float JungleGroundY = -0.1f;
     private const float GorillaGroundY = -0.06f;
-    private const float GorillaHeight = 5.4f;
+    private const float GorillaHeight = 3.6f;
 
     private static readonly int WarmingUpState = Animator.StringToHash("Base Layer.Warming up");
     private static readonly int IdleState = Animator.StringToHash("Base Layer.Idle");
@@ -96,6 +96,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         if (menuCamera == null) return;
 
         ConfigureEnvironment();
+        ClearAuthoredSetDressing();
         BuildStage();
         StageCharacters();
         BuildJungle();
@@ -106,11 +107,15 @@ public sealed class MainMenuDiorama : MonoBehaviour
         if (playerAnimator != null)
         {
             playerAnimator.applyRootMotion = false;
+            playerAnimator.updateMode = AnimatorUpdateMode.UnscaledTime;
+            playerAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             playerAnimator.Play(WarmingUpState, 0, 0f);
         }
         if (rivalAnimator != null)
         {
             rivalAnimator.applyRootMotion = false;
+            rivalAnimator.updateMode = AnimatorUpdateMode.UnscaledTime;
+            rivalAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             rivalAnimator.Play(IdleState, 0, 0.37f);
         }
         if (gorillaAnimator != null)
@@ -223,12 +228,13 @@ public sealed class MainMenuDiorama : MonoBehaviour
         {
             RenderSettings.sun = sun;
             sun.color = new Color(1f, 0.932f, 0.76f);
-            sun.shadowStrength = 0.78f;
+            sun.intensity = 1.05f;
+            sun.shadowStrength = 0.6f;
         }
 
         // Warm canopy bounce in front of the characters.
         CreatePointLight("Golden Canopy Fill", new Vector3(-2.6f, 4.4f, -1.6f),
-            new Color(1f, 0.8f, 0.44f), 7f, 15f);
+            new Color(1f, 0.8f, 0.44f), 2.4f, 12f);
 
         // Cool green rim from behind the jungle to separate the silhouettes.
         GameObject rimObject = new GameObject("Jungle Rim Light");
@@ -239,6 +245,17 @@ public sealed class MainMenuDiorama : MonoBehaviour
         rim.color = new Color(0.55f, 0.94f, 0.6f);
         rim.intensity = 0.55f;
         rim.shadows = LightShadows.None;
+    }
+
+    private static void ClearAuthoredSetDressing()
+    {
+        // The runtime forest replaces the old palms and small showcase disc.
+        // Keeping both sets puts thick trunks across the character silhouettes.
+        GameObject clearing = GameObject.Find("Jungle Clearing");
+        if (clearing == null) return;
+        foreach (Transform child in clearing.transform)
+            if (child.name != "Grassy Clearing" && child.name != "Sandy Trail")
+                child.gameObject.SetActive(false);
     }
 
     private Light CreatePointLight(string name, Vector3 position, Color color, float intensity, float range)
@@ -294,6 +311,8 @@ public sealed class MainMenuDiorama : MonoBehaviour
             trophy = Instantiate(trophyPrefab, new Vector3(0f, plinthTop + 0.06f, 3.4f),
                 Quaternion.Euler(0f, 25f, 0f), root);
             trophy.name = "Banana Trophy";
+            foreach (MonoBehaviour behaviour in trophy.GetComponentsInChildren<MonoBehaviour>(true))
+                behaviour.enabled = false;
             NormalizeHeight(trophy, 1.0f);
             GroundTo(trophy, plinthTop + 0.06f);
             trophyHome = trophy.transform.position;
@@ -399,8 +418,8 @@ public sealed class MainMenuDiorama : MonoBehaviour
     {
         if (menuCamera == null) return;
 
-        float playerX = Mathf.Min(3.9f, Mathf.Max(0.9f, HalfWidthAt(-0.6f) * 0.7f));
-        float rivalX = Mathf.Min(3.9f, Mathf.Max(0.9f, HalfWidthAt(0.15f) * 0.7f));
+        float playerX = Mathf.Min(2.6f, Mathf.Max(0.9f, HalfWidthAt(-0.6f) * 0.52f));
+        float rivalX = Mathf.Min(2.6f, Mathf.Max(0.9f, HalfWidthAt(0.15f) * 0.52f));
         float groundY = StageTop + 0.02f;
 
         if (player != null)
@@ -512,6 +531,13 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
         gorilla = instance.transform;
         gorillaAnimator = instance.GetComponentInChildren<Animator>(true);
+        if (gorillaAnimator != null)
+        {
+            gorillaAnimator.applyRootMotion = false;
+            gorillaAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            gorillaAnimator.Play(GorillaIdleState, 0, 0f);
+            gorillaAnimator.Update(0f);
+        }
 
         // Measure the animated (skinned) body only. The prefab also carries a
         // static oversized mesh from the source FBX; if it were included in the
@@ -533,6 +559,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         if (gorillaAnimator != null)
         {
             gorillaAnimator.applyRootMotion = false;
+            gorillaAnimator.updateMode = AnimatorUpdateMode.UnscaledTime;
             gorillaAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             gorillaAnimator.speed = 0.78f;
         }
@@ -710,6 +737,14 @@ public sealed class MainMenuDiorama : MonoBehaviour
             GameObject instance = Instantiate(prefab, position, Quaternion.Euler(0f, yaw, 0f), parent);
             instance.transform.localScale = Vector3.one * scale;
             GroundTo(instance, JungleGroundY);
+            // Keep the foreground clearing open even for imported trees with
+            // off-centre pivots and very broad canopies.
+            if (position.z < 10f && TryGetBounds(instance, out Bounds bounds))
+            {
+                float side = position.x < 0f ? -1f : 1f;
+                float shift = side < 0f ? Mathf.Min(0f, -4.3f - bounds.max.x) : Mathf.Max(0f, 4.3f - bounds.min.x);
+                instance.transform.position += Vector3.right * shift;
+            }
             return;
         }
 
@@ -804,6 +839,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         main.duration = 8f;
         main.loop = true;
         main.prewarm = true;
+        main.useUnscaledTime = true;
         main.playOnAwake = false;
         main.startLifetime = new ParticleSystem.MinMaxCurve(9f, 14f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(0.04f, 0.3f);
@@ -812,8 +848,15 @@ public sealed class MainMenuDiorama : MonoBehaviour
         main.startRotationX = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
         main.startRotationY = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
         main.startRotationZ = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-        main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(0.57f, 0.78f, 0.3f), new Color(0.95f, 0.6f, 0.16f));
+        Gradient leafColors = new Gradient();
+        leafColors.SetKeys(new[]
+        {
+            new GradientColorKey(new Color(0.28f, 0.6f, 0.18f), 0f),
+            new GradientColorKey(new Color(0.57f, 0.78f, 0.3f), 0.45f),
+            new GradientColorKey(new Color(0.95f, 0.6f, 0.16f), 0.7f),
+            new GradientColorKey(new Color(0.78f, 0.3f, 0.09f), 1f)
+        }, new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+        main.startColor = new ParticleSystem.MinMaxGradient(leafColors) { mode = ParticleSystemGradientMode.RandomColor };
         main.gravityModifier = 0.03f;
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.scalingMode = ParticleSystemScalingMode.Hierarchy;
@@ -921,6 +964,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         main.duration = 6f;
         main.loop = true;
         main.prewarm = true;
+        main.useUnscaledTime = true;
         main.playOnAwake = false;
         main.startLifetime = new ParticleSystem.MinMaxCurve(5f, 9.5f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(0.02f, 0.12f);
@@ -1363,13 +1407,13 @@ public sealed class MainMenuDiorama : MonoBehaviour
             for (int i = 0; i < skins.Length; i++)
             {
                 SkinnedMeshRenderer skin = skins[i];
-                if (skin == null) continue;
+                if (skin == null || skin.sharedMesh == null || !skin.enabled) continue;
                 if (!foundSkinned)
                 {
-                    bounds = skin.bounds;
+                    bounds = SkinBounds(skin);
                     foundSkinned = true;
                 }
-                else bounds.Encapsulate(skin.bounds);
+                else bounds.Encapsulate(SkinBounds(skin));
             }
 
             if (foundSkinned && bounds.size.sqrMagnitude > 0.000001f)
@@ -1382,15 +1426,43 @@ public sealed class MainMenuDiorama : MonoBehaviour
         for (int i = 0; i < renderers.Length; i++)
         {
             Renderer renderer = renderers[i];
-            if (renderer == null) continue;
+            if (renderer == null || !renderer.enabled) continue;
+            Bounds current;
+            if (renderer is SkinnedMeshRenderer skin && skin.sharedMesh != null)
+                current = SkinBounds(skin);
+            else if (renderer.TryGetComponent(out MeshFilter filter) && filter.sharedMesh != null)
+                current = TransformBounds(filter.sharedMesh.bounds, renderer.transform.localToWorldMatrix);
+            else continue;
             if (!found)
             {
-                bounds = renderer.bounds;
+                bounds = current;
                 found = true;
             }
-            else bounds.Encapsulate(renderer.bounds);
+            else bounds.Encapsulate(current);
         }
         return found && bounds.size.sqrMagnitude > 0.000001f;
+    }
+
+    private static Bounds TransformBounds(Bounds local, Matrix4x4 matrix)
+    {
+        // Renderer.bounds can still describe the previous transform until the
+        // first render. Compute fresh bounds while scaling and grounding props.
+        Bounds world = new Bounds(matrix.MultiplyPoint3x4(local.center), Vector3.zero);
+        for (int i = 0; i < 8; i++)
+            world.Encapsulate(matrix.MultiplyPoint3x4(local.center + Vector3.Scale(local.extents,
+                new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f))));
+        return world;
+    }
+
+    private static Bounds SkinBounds(SkinnedMeshRenderer skin)
+    {
+        // Imported culling bounds often describe a different pose (or contain
+        // root translation). Measure the sampled idle body for stage placement.
+        var mesh = new Mesh();
+        skin.BakeMesh(mesh);
+        Bounds bounds = TransformBounds(mesh.bounds, skin.transform.localToWorldMatrix);
+        Destroy(mesh);
+        return bounds;
     }
 
     private static void NormalizeHeight(GameObject instance, float targetHeight, bool skinnedOnly = false)

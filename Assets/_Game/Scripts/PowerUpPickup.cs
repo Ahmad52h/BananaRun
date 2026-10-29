@@ -221,18 +221,20 @@ public class PowerUpPickup : MonoBehaviour
         var rival = player ? null : other.GetComponentInParent<RivalRunner>();
         if (!player && rival == null) return;
 
-        collected = true;
         if (player)
         {
+            var health = manager.GetComponent<PlayerHealth>();
+            if (!manager.isActiveAndEnabled || (health != null && health.IsRunOver)) return;
             manager.Activate(type);
             // Pickup audio belongs to the Player only; the rival collects silently.
             RunnerAudio.Instance?.PlayPowerUpCollect();
         }
         else
         {
-            rival.CollectPowerUp(type);
+            if (!rival.CollectPowerUp(type)) return;
         }
 
+        collected = true;
         PlayCollectionEffect(player);
         gameObject.SetActive(false);
     }

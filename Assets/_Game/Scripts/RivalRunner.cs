@@ -75,6 +75,7 @@ public sealed class RivalRunner : MonoBehaviour
     private float projectileStunEndsAt, projectileProtectionEndsAt;
     private float shieldEndsAt, thunderEndsAt, magnetEndsAt, highJumpEndsAt, bulldozerEndsAt;
     private bool gliderJump;
+    private bool highJumpRequested;
     private bool bombLaunched;
     private RottenBananaBomb bombTrapPrefab;
     private float nextBombDrop;
@@ -96,8 +97,8 @@ public sealed class RivalRunner : MonoBehaviour
     public bool IsJumping => jumping;
     public bool IsGrounded => controller != null && controller.enabled && controller.isGrounded && !IsJumping;
     public bool IsProjectileStunned => !HasThunder && Time.time < projectileStunEndsAt;
-    public bool HasShield => Time.time < shieldEndsAt;
-    public bool HasThunder => Time.time < thunderEndsAt;
+    public bool HasShield => !HasFinished && Time.time < shieldEndsAt;
+    public bool HasThunder => !HasFinished && Time.time < thunderEndsAt;
     public bool HasMagnet => !HasFinished && Time.time < magnetEndsAt;
     public bool HasHighJump => !HasFinished && Time.time < highJumpEndsAt;
     public bool HasBulldozer => !HasFinished && Time.time < bulldozerEndsAt;
@@ -209,6 +210,18 @@ public sealed class RivalRunner : MonoBehaviour
         {
             // Latch the high-jump arc if the pickup is collected mid-air.
             gliderJump = true;
+        }
+        // Trigger callbacks run inside CharacterController.Move. Defer takeoff
+        // until the next update so the grounded reset cannot erase the impulse.
+        if (highJumpRequested && HasHighJump && !bombLaunched && !IsStumbling && !sliding)
+        {
+            highJumpRequested = false;
+            float launchGravity = Mathf.Max(0.1f, -BaseGravity * player.GliderGravityMultiplier);
+            verticalVelocity = Mathf.Max(verticalVelocity, Mathf.Sqrt(2f * launchGravity * player.HighJumpHeight));
+            jumping = true;
+            gliderJump = true;
+            if (animator != null)
+                animator.SetFloat("JumpSpeed", 1.666667f / (2f * verticalVelocity / launchGravity));
         }
         if (!IsStumbling && !sliding && IsGrounded && Time.time >= nextDecision)
         {
@@ -509,6 +522,12 @@ public sealed class RivalRunner : MonoBehaviour
             }
 
             var banana = bananaProbes[i].GetComponentInParent<BananaPickup>();
+            var powerUp = bananaProbes[i].GetComponentInParent<PowerUpPickup>();
+            if (powerUp != null && powerUp.isActiveAndEnabled)
+            {
+                score += 6f / Mathf.Max(2f, ahead);
+                continue;
+            }
             if (banana == null || !banana.isActiveAndEnabled) continue;
             score += banana.Value / Mathf.Max(2f, ahead);
         }
@@ -665,9 +684,10 @@ public sealed class RivalRunner : MonoBehaviour
         if (IsObstacle(other) && other.bounds.max.y > controller.bounds.min.y + 0.08f && Time.time >= protectedUntil) Stumble();
     }
 
-    public void CollectPowerUp(PowerUpType type)
+    public bool CollectPowerUp(PowerUpType type)
     {
-        if (HasFinished) return;
+        if (HasFinished || recoveringFall || !isActiveAndEnabled || controller == null || !controller.enabled)
+            return false;
         switch (type)
         {
             case PowerUpType.Bulldozer:
@@ -678,9 +698,7 @@ public sealed class RivalRunner : MonoBehaviour
                 break;
             case PowerUpType.Glider:
                 highJumpEndsAt = Time.time + PowerUpManager.GliderDurationSeconds;
-                // Collecting the high-jump pickup while airborne should extend
-                // the current arc instead of waiting for the next obstacle.
-                if (controller != null && !controller.isGrounded) gliderJump = true;
+                highJumpRequested = true;
                 break;
             case PowerUpType.Shield:
                 shieldEndsAt = Time.time + PowerUpManager.ShieldDurationSeconds;
@@ -688,8 +706,12 @@ public sealed class RivalRunner : MonoBehaviour
             case PowerUpType.Thunder:
                 thunderEndsAt = Time.time + PowerUpManager.ThunderDurationSeconds;
                 setbackEndsAt = Mathf.Min(setbackEndsAt, Time.time);
+                projectileStunEndsAt = Mathf.Min(projectileStunEndsAt, Time.time);
                 break;
+            default:
+                return false;
         }
+        return true;
     }
 
     public bool TryConsumeShield()
@@ -927,7 +949,8 @@ public sealed class RivalRunner : MonoBehaviour
     public void FinishRace()
     {
         HasFinished = true;
-        bulldozerEndsAt = 0f;
+        shieldEndsAt = thunderEndsAt = magnetEndsAt = highJumpEndsAt = bulldozerEndsAt = 0f;
+        highJumpRequested = false;
         ResetSlide();
         RestoreModelScale();
         Animate(IdleState);
