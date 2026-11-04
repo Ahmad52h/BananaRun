@@ -39,6 +39,7 @@ public class TropicalScenery : MonoBehaviour
         for (int i = first; i <= last; i++)
         {
             if (live.ContainsKey(i)) continue;
+            if (TrackExpansion.OverlapsWater(i * length, (i + 1) * length)) continue;
             var prefab = borderChunks[((i % borderChunks.Length) + borderChunks.Length) % borderChunks.Length];
             if (prefab != null) live[i] = Instantiate(prefab, new Vector3(0, groundHeight, i * length), Quaternion.identity, transform);
         }

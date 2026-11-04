@@ -46,6 +46,16 @@ public class FinishGate : MonoBehaviour
     public int BananaBasketTarget => Mathf.Max(requiredBananas, targetBananasForBasket);
     public Transform BananaTarget => bananaTarget;
 
+    /// <summary>Rebind delivery to the shared basket placed at the extended finish.</summary>
+    public void ConfigureBananaTarget(Transform target) => bananaTarget = target;
+
+    /// <summary>Runtime configuration used by the extended track without touching scene YAML.</summary>
+    public void ConfigureBananaQuota(bool enabled, int target)
+    {
+        enableBananaQuota = enabled;
+        targetBananasForBasket = Mathf.Max(1, target);
+    }
+
     private void OnValidate()
     {
         targetBananasForBasket = Mathf.Max(requiredBananas, targetBananasForBasket);

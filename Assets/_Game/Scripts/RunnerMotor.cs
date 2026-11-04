@@ -198,6 +198,7 @@ public class RunnerMotor : MonoBehaviour
             CurrentSpeed * deltaTime
         );
 
+        BridgeDeck.FollowSurface(controller, ref movement, verticalVelocity);
         CollisionFlags collisions = controller.Move(movement);
 
         if ((collisions & CollisionFlags.Above) != 0 &&
@@ -207,6 +208,7 @@ public class RunnerMotor : MonoBehaviour
         }
 
         if (EnforceRiverGapFall()) return;
+        if (TrackExpansion.TryHandlePlayerWaterFall(health, controller)) return;
     }
 
     /// <summary>

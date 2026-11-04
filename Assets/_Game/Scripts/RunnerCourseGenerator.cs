@@ -76,6 +76,42 @@ public class RunnerCourseGenerator : MonoBehaviour
     // Reserve against the cap, including future speed increases through the whole transition.
     public float ReactionDistance => player != null ? player.MaximumForwardSpeed * (minimumReactionSeconds + player.LaneChangeDuration) : 0f;
 
+    /// <summary>
+    /// Runtime water spans (bridges) are registered before Start so the course
+    /// never places an obstacle or scenery tree over open water.
+    /// </summary>
+    public void RegisterWaterZone(float startZ, float endZ)
+    {
+        float start = Mathf.Min(startZ, endZ);
+        float end = Mathf.Max(startZ, endZ);
+        if (end <= start) return;
+        waterZones.Add(new Vector2(start, end));
+    }
+
+    public bool IsInsideWaterZone(float worldZ, float margin = 0f)
+    {
+        for (int i = 0; i < waterZones.Count; i++)
+        {
+            Vector2 zone = waterZones[i];
+            if (worldZ >= zone.x - margin && worldZ <= zone.y + margin) return true;
+        }
+        return false;
+    }
+
+    private bool TryGetWaterZone(float startZ, float endZ, out float zoneEnd)
+    {
+        zoneEnd = 0f;
+        bool found = false;
+        for (int i = 0; i < waterZones.Count; i++)
+        {
+            Vector2 zone = waterZones[i];
+            if (endZ < zone.x || startZ > zone.y) continue;
+            zoneEnd = found ? Mathf.Max(zoneEnd, zone.y) : zone.y;
+            found = true;
+        }
+        return found;
+    }
+
     public readonly struct Section
     {
         public readonly float Z, Start, End, Difficulty;
@@ -84,6 +120,7 @@ public class RunnerCourseGenerator : MonoBehaviour
         { Z = z; Start = start; End = end; Difficulty = difficulty; SafeLane = lane; }
     }
     private readonly List<Section> sections = new List<Section>();
+    private readonly List<Vector2> waterZones = new List<Vector2>();
     public IReadOnlyList<Section> Sections => sections;
     private sealed class ObstacleProfile
     {
@@ -196,6 +233,12 @@ public class RunnerCourseGenerator : MonoBehaviour
                 lastSafeLane = 0; previousEnd = safeRunStart = gapEnd + 3f;
                 continue;
             }
+            if (TryGetWaterZone(z - back, z + front, out float waterEnd))
+            {
+                z = waterEnd + 18f + back;
+                lastSafeLane = 0; previousEnd = safeRunStart = waterEnd + 3f;
+                continue;
+            }
             difficulty = DifficultyAt(z);
             SpawnObstacle(first, centerX + firstLane * laneWidth, z);
             SpawnObstacle(second, centerX + secondLane * laneWidth, z + stagger);
@@ -212,19 +255,19 @@ public class RunnerCourseGenerator : MonoBehaviour
             }
             if (bananaPrefab != null)
             {
-                for (int b = 0; b < 3; b++) SpawnPickup(bananaPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.1f, z - 4 + b * 2.5f));
+                for (int b = 0; b < 4; b++) SpawnPickup(bananaPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.1f, z - 5 + b * 2.6f));
                 // More frequent adjacent-lane transitions create demanding, still-safe banana trails.
                 if (safeLane != lastSafeLane)
-                    for (int b = 1; b <= 3; b++)
+                    for (int b = 1; b <= 4; b++)
                     {
-                        float t = b / 4f;
+                        float t = b / 5f;
                         SpawnPickup(bananaPrefab, new Vector3(centerX + Mathf.Lerp(lastSafeLane, safeLane, t) * laneWidth,
                             groundHeight + 1.1f, Mathf.Lerp(previousEnd + 0.2f, z - back - 0.2f, t)));
                     }
             }
-            if (coconutPrefab != null && row % 5 == 0)
+            if (coconutPrefab != null && row % 3 == 0)
                 SpawnPickup(coconutPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
-            if (bombPickupPrefab != null && row % 5 == 2)
+            if (bombPickupPrefab != null && row % 4 == 2)
                 SpawnPickup(bombPickupPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
             if (powerUpPrefabs != null && powerUpPrefabs.Length > 0 && z >= nextPowerUp)
             {
@@ -244,7 +287,8 @@ public class RunnerCourseGenerator : MonoBehaviour
                         float arcStart = z + 1f + player.MaximumForwardSpeed * 0.8f;
                         float arcLength = player.SpeedAtDifficulty(difficulty) * player.HighJumpDuration;
                         float arcEnd = arcStart + arcLength;
-                        if (arcEnd + ReactionDistance < end && (arcEnd < gapStart - 18f || arcStart > gapEnd + 18f))
+                        if (arcEnd + ReactionDistance < end && (arcEnd < gapStart - 18f || arcStart > gapEnd + 18f) &&
+                            !IsInsideWaterZone(arcStart - 2f) && !IsInsideWaterZone(arcEnd + 2f))
                         {
                             SpawnHighBananaArc(centerX + safeLane * laneWidth, arcStart, arcLength);
                             // Keep this safe lane open through the complete jump and landing.
@@ -322,6 +366,7 @@ public class RunnerCourseGenerator : MonoBehaviour
             for (int side = -1; side <= 1; side += 2)
             {
                 if (z > gapStart - 2f && z < gapEnd + 2f) continue;
+                if (IsInsideWaterZone(z, 5f)) continue;
                 var prefab = sceneryPrefabs[random.Next(sceneryPrefabs.Length)];
                 if (prefab == null) continue;
                 var tree = Instantiate(prefab, new Vector3(centerX + side * (7f + (float)random.NextDouble() * 5f), groundHeight, z),
@@ -451,7 +496,9 @@ public class RunnerCourseGenerator : MonoBehaviour
             float first = Mathf.Max(startDistance, player.transform.position.z + 20f) + 55f;
             float last = finishLine.position.z - finishApproach - 8f;
             float fit = (last - first) / (runtime.Count - 1) * 0.75f;
-            if (fit > 0f) powerUpSpacing = Mathf.Min(powerUpSpacing, Mathf.Max(45f, fit));
+            // Keep the pickups lively on the lengthened course instead of leaving
+            // several hundred metres between abilities.
+            if (fit > 0f) powerUpSpacing = Mathf.Min(powerUpSpacing, Mathf.Max(60f, fit), 85f);
         }
     }
 

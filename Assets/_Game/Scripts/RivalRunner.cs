@@ -237,9 +237,12 @@ public sealed class RivalRunner : MonoBehaviour
         verticalVelocity += gravity * dt;
         float dy = verticalVelocity * dt;
         float previousZ = transform.position.z;
-        var collision = controller.Move(new Vector3(x - transform.position.x, dy, dz));
+        var movement = new Vector3(x - transform.position.x, dy, dz);
+        BridgeDeck.FollowSurface(controller, ref movement, verticalVelocity);
+        var collision = controller.Move(movement);
         if ((collision & CollisionFlags.Above) != 0) verticalVelocity = Mathf.Min(0f, verticalVelocity);
         if (EnforceRiverGapFall()) return;
+        if (TrackExpansion.TryHandleRivalWaterFall(this, controller)) return;
         if (transform.position.y < lastGroundedPosition.y - 3f) Fall();
         ConsiderBombDrop();
         TrackForwardProgress(transform.position.z - previousZ, dt);
@@ -656,6 +659,7 @@ public sealed class RivalRunner : MonoBehaviour
 
     private bool IsObstacle(Collider collider) => collider != null && collider.enabled &&
         !(collider is TerrainCollider) &&
+        collider.GetComponentInParent<BridgeDeck>() == null &&
         !collider.transform.IsChildOf(transform) && !collider.transform.IsChildOf(player.transform) &&
         (IsHazard(collider) || (!collider.isTrigger && collider.bounds.max.y > controller.bounds.min.y + 0.15f));
 

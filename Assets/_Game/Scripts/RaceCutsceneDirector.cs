@@ -71,6 +71,9 @@ public sealed class RaceCutsceneDirector : MonoBehaviour
     /// <summary>True while the finish gate should hold the results card back.</summary>
     public bool VictoryShowcasePlaying => victoryRunning;
 
+    /// <summary>Keep the celebration aligned with the runtime finish basket.</summary>
+    public void ConfigureCelebrationBasket(Transform target) => celebrationBasket = target;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoInstall()
     {

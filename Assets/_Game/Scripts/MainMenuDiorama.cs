@@ -53,9 +53,8 @@ public sealed class MainMenuDiorama : MonoBehaviour
     private Quaternion gorillaHomeRotation;
     private Vector3 gorillaHomeScale;
 
-    private GameObject trophy;
-    private Vector3 trophyHome;
-    private Light trophyGlow;
+    private GameObject bananaBasket;
+    private Light basketGlow;
 
     private ParticleSystem fallingLeaves;
     private readonly List<ParticleSystem> fireflies = new List<ParticleSystem>();
@@ -273,7 +272,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
     }
 
     // ------------------------------------------------------------------
-    // Stage, trophy and props
+    // Stage, banana basket and props
     // ------------------------------------------------------------------
 
     private void BuildStage()
@@ -284,53 +283,30 @@ public sealed class MainMenuDiorama : MonoBehaviour
         Material moss = RuntimeMaterial("Moss Carpet", new Color(0.19f, 0.32f, 0.13f), 0f, 0.08f, Color.black);
         Material mossDark = RuntimeMaterial("Deep Moss", new Color(0.13f, 0.23f, 0.1f), 0f, 0.06f, Color.black);
         Material stone = RuntimeMaterial("Temple Stone", new Color(0.34f, 0.34f, 0.3f), 0.05f, 0.16f, Color.black);
-        Material gold = RuntimeMaterial("Trophy Gold", new Color(0.98f, 0.74f, 0.24f), 0.85f, 0.72f,
-            new Color(0.55f, 0.34f, 0.05f));
         Material coconut = RuntimeMaterial("Coconut Shell", new Color(0.3f, 0.19f, 0.1f), 0.05f, 0.12f, Color.black);
 
         // A broad mossy platform replaces the tiny authored showcase disc and
-        // gives both monkeys clean footing around the central trophy.
+        // gives both monkeys clean footing around the central banana basket.
         MakePrimitive(PrimitiveType.Cylinder, "Moss Stage", root,
             new Vector3(0f, StageTop - 0.09f, 1.1f), new Vector3(8.8f, 0.09f, 5.2f), moss);
         MakePrimitive(PrimitiveType.Cylinder, "Stage Border", root,
             new Vector3(0f, StageTop - 0.145f, 1.1f), new Vector3(9.6f, 0.05f, 5.6f), mossDark);
 
-        // Central trophy plinth, standing on the back of the moss stage.
-        const float plinthHeight = 0.58f;
-        float plinthBottom = StageTop;
-        float plinthTop = plinthBottom + plinthHeight;
-        MakePrimitive(PrimitiveType.Cylinder, "Trophy Plinth", root,
-            new Vector3(0f, plinthBottom + plinthHeight * 0.5f, 3.4f),
-            new Vector3(0.95f, plinthHeight * 0.5f, 0.95f), stone);
-        MakePrimitive(PrimitiveType.Cylinder, "Plinth Cap", root,
-            new Vector3(0f, plinthTop + 0.035f, 3.4f), new Vector3(1.1f, 0.035f, 1.1f), gold);
-
-        GameObject trophyPrefab = LoadPrefab("Trophy");
-        if (trophyPrefab != null)
+        // Use the original textured finish basket, lid and banana poses. Its
+        // shared prefab is unit-height and centred on the woven body's base.
+        GameObject basketPrefab = Resources.Load<GameObject>("Shared/WovenBananaBasket");
+        if (basketPrefab != null)
         {
-            trophy = Instantiate(trophyPrefab, new Vector3(0f, plinthTop + 0.06f, 3.4f),
-                Quaternion.Euler(0f, 25f, 0f), root);
-            trophy.name = "Banana Trophy";
-            foreach (MonoBehaviour behaviour in trophy.GetComponentsInChildren<MonoBehaviour>(true))
-                behaviour.enabled = false;
-            NormalizeHeight(trophy, 1.0f);
-            GroundTo(trophy, plinthTop + 0.06f);
-            trophyHome = trophy.transform.position;
+            bananaBasket = Instantiate(basketPrefab, new Vector3(0f, StageTop + 0.02f, 1.8f),
+                Quaternion.Euler(0f, 20f, 0f), root);
+            bananaBasket.name = "Menu Woven Banana Basket";
+            bananaBasket.transform.localScale = Vector3.one * 1.55f;
+            GroundTo(bananaBasket, StageTop + 0.02f);
         }
+        else Debug.LogError("MainMenuDiorama: missing shared woven banana basket prefab.");
 
-        // A handful of gold trinkets around the plinth make the pile read at a glance.
-        for (int i = 0; i < 6; i++)
-        {
-            float angle = (i / 6f) * Mathf.PI * 2f + 0.4f;
-            float radius = 0.34f + (i % 2) * 0.1f;
-            GameObject gem = MakePrimitive(PrimitiveType.Sphere, "Trophy Gem " + i, root,
-                new Vector3(Mathf.Cos(angle) * radius, plinthTop + 0.1f, 3.4f + Mathf.Sin(angle) * radius),
-                Vector3.one * (0.09f + (i % 3) * 0.028f), gold);
-            gem.transform.rotation = Quaternion.Euler(i * 37f, i * 61f, i * 19f);
-        }
-
-        trophyGlow = CreatePointLight("Trophy Glow", new Vector3(0f, plinthTop + 0.85f, 3.3f),
-            new Color(1f, 0.78f, 0.3f), 4.2f, 6.5f);
+        basketGlow = CreatePointLight("Banana Basket Glow", new Vector3(0f, 1.1f, 1.3f),
+            new Color(1f, 0.78f, 0.3f), 0.9f, 2.4f);
 
         // Storytelling props: coconuts for the rival and the path.
         MakePrimitive(PrimitiveType.Sphere, "Coconut A", root,
@@ -1260,7 +1236,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         AnimateIdleCamera(time);
         AnimateIdleCharacters(time);
         AnimateUi(time);
-        AnimateTrophy(time);
+        AnimateBasket(time);
     }
 
     private void AnimateIdleCamera(float time)
@@ -1312,15 +1288,13 @@ public sealed class MainMenuDiorama : MonoBehaviour
         }
     }
 
-    private void AnimateTrophy(float time)
+    private void AnimateBasket(float time)
     {
-        if (trophyGlow != null)
-            trophyGlow.intensity = 3.6f + Mathf.Sin(time * 1.9f) * 1.1f;
-        if (trophy != null)
-        {
-            trophy.transform.position = trophyHome + Vector3.up * (Mathf.Sin(time * 1.25f) * 0.035f);
-            trophy.transform.rotation = Quaternion.Euler(0f, 25f + time * 12f, 0f);
-        }
+        if (basketGlow != null)
+            basketGlow.intensity = 0.9f + Mathf.Sin(time * 1.4f) * 0.15f;
+        // Gentle yaw keeps the open top and tilted lid facing the camera.
+        if (bananaBasket != null)
+            bananaBasket.transform.rotation = Quaternion.Euler(0f, 20f + Mathf.Sin((time - startedAt) * 0.25f) * 12f, 0f);
     }
 
     private void UpdateExit(float elapsed)
