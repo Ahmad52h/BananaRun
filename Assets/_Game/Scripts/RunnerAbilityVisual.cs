@@ -57,6 +57,13 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         BuildThunderTrail();
         BuildAbilityAuras();
         configured = true;
+        RuntimeAssetOwner.Own(shieldMaterial, this);
+        RuntimeAssetOwner.Own(magnetAuraMaterial, this);
+        RuntimeAssetOwner.Own(highJumpAuraMaterial, this);
+        RuntimeAssetOwner.Own(bulldozerAuraMaterial, this);
+        if (thunderTrail != null) RuntimeAssetOwner.Own(thunderTrail.sharedMaterial, this);
+        foreach (var aura in new[] { magnetAura, highJumpAura, bulldozerAura })
+            if (aura != null) RuntimeAssetOwner.Own(aura.GetComponent<MeshFilter>().sharedMesh, this);
     }
 
     private void BuildShield()
@@ -128,7 +135,7 @@ public sealed class RunnerAbilityVisual : MonoBehaviour
         thunderTrail.colorGradient = gradient;
         var trailShader = Shader.Find("Sprites/Default");
         if (trailShader != null)
-            thunderTrail.material = new Material(trailShader) { name = "Runtime Thunder Trail" };
+            thunderTrail.material = new Material(trailShader) { enableInstancing = true, name = "Runtime Thunder Trail" };
         else
             thunderTrail.material = PowerUpVisualUtility.CreateGlowMaterial(new Color(1f, 0.9f, 0.3f, 1f), true);
 

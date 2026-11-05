@@ -4,6 +4,8 @@ using UnityEngine;
 public sealed class BombPickup : MonoBehaviour
 {
     private bool collected;
+    public bool IsCollected => collected;
+    internal void ResetForSpawn() => collected = false;
     private void Awake()
     {
         GetComponent<SphereCollider>().isTrigger = true;
@@ -11,7 +13,7 @@ public sealed class BombPickup : MonoBehaviour
         body.isKinematic = true;
         body.useGravity = false;
     }
-    private void OnEnable() => collected = false;
+    private void Start() => TrackDistanceStreamer.Register(gameObject);
     private void OnTriggerEnter(Collider other)
     {
         if (collected) return;

@@ -207,7 +207,7 @@ public sealed class CelebrationBananaBurst : MonoBehaviour
             return;
         }
 
-        bananaMaterial = new Material(shader) { name = "Celebration Banana Burst" };
+        bananaMaterial = new Material(shader) { enableInstancing = true, name = "Celebration Banana Burst" };
         if (bananaMaterial.HasProperty("_BaseColor")) bananaMaterial.SetColor("_BaseColor", BananaYellow);
         if (bananaMaterial.HasProperty("_Color")) bananaMaterial.SetColor("_Color", BananaYellow);
         if (bananaMaterial.HasProperty("_Metallic")) bananaMaterial.SetFloat("_Metallic", 0f);

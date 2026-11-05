@@ -263,6 +263,8 @@ namespace MaekoStudio.Flock
 
         void Start()
         {
+            // Neighbour steering is O(n^2). Keep several small, animated flocks on phones.
+            if (MobilePerformanceBootstrap.IsMobileProfileActive) count = Mathf.Min(count, 16);
             home = Center;
 
             // 3D chirp source that lives at the centre of the ball.

@@ -47,6 +47,11 @@ public class PowerUpManager : MonoBehaviour
     private Vector3 originalModelScale;
     private PowerUpType displayedType;
     private readonly StringBuilder timerText = new StringBuilder(96);
+    private readonly int[] displayedTenths = { -1, -1, -1, -1, -1 };
+    private readonly string[] timerPrefixes = new string[5];
+    private PlayerHealth health;
+    private RunnerAbilityVisual abilityVisual;
+    private float nextModelLookup;
     public float MagnetRadius => magnetRadius;
     public bool HasShield => IsActive(PowerUpType.Shield);
     public bool HasThunder => IsActive(PowerUpType.Thunder);
@@ -57,6 +62,7 @@ public class PowerUpManager : MonoBehaviour
     private void Awake()
     {
         ActivePlayer = this;
+        health = GetComponent<PlayerHealth>();
         if (playerModel == null)
         {
             var animator = GetComponentInChildren<Animator>();
@@ -65,6 +71,10 @@ public class PowerUpManager : MonoBehaviour
         if (playerModel != null) originalModelScale = playerModel.localScale;
         if (GetComponent<RunnerAbilityVisual>() == null)
             gameObject.AddComponent<RunnerAbilityVisual>();
+        abilityVisual = GetComponent<RunnerAbilityVisual>();
+        for (int i = 0; i < timerPrefixes.Length; i++)
+            timerPrefixes[i] = "<color=#" + ColorUtility.ToHtmlStringRGB(PowerUpVisualUtility.ColorFor((PowerUpType)i)) +
+                ">" + ((PowerUpType)i).ToString().ToUpperInvariant() + "</color> ";
         ConfigureTimerLabel();
     }
 
@@ -98,9 +108,9 @@ public class PowerUpManager : MonoBehaviour
 
     public void Activate(PowerUpType type)
     {
-        var health = GetComponent<PlayerHealth>();
         if (health != null && health.IsRunOver) return;
         endsAt[(int)type] = Time.time + DurationFor(type);
+        RunnerMagnetTargets.Invalidate();
         displayedType = type;
         RefreshIndicator();
     }
@@ -110,7 +120,7 @@ public class PowerUpManager : MonoBehaviour
     {
         if (!HasShield) return false;
         endsAt[(int)PowerUpType.Shield] = 0f;
-        GetComponent<RunnerAbilityVisual>()?.PlayShieldBreak();
+        abilityVisual?.PlayShieldBreak();
         if (!IsActive(displayedType)) displayedType = PowerUpType.Shield;
         RefreshIndicator();
         return true;
@@ -140,7 +150,8 @@ public class PowerUpManager : MonoBehaviour
     /// </summary>
     private void ResolvePlayerModel()
     {
-        if (playerModel != null) return;
+        if (playerModel != null || Time.unscaledTime < nextModelLookup) return;
+        nextModelLookup = Time.unscaledTime + 1f;
         var animator = GetComponentInChildren<Animator>();
         if (animator == null) return;
         playerModel = animator.transform;
@@ -174,7 +185,14 @@ public class PowerUpManager : MonoBehaviour
         if (countdownLabel != null)
         {
             countdownLabel.gameObject.SetActive(visible);
-            if (visible)
+            bool changed = false;
+            for (int i = 0; i < endsAt.Length; i++)
+            {
+                int tenths = IsActive((PowerUpType)i) ? Mathf.Max(1, Mathf.RoundToInt(Remaining((PowerUpType)i) * 10f)) : 0;
+                if (displayedTenths[i] != tenths) changed = true;
+                displayedTenths[i] = tenths;
+            }
+            if (visible && changed)
             {
                 timerText.Length = 0;
                 for (int i = 0; i < endsAt.Length; i++)
@@ -182,11 +200,10 @@ public class PowerUpManager : MonoBehaviour
                     var type = (PowerUpType)i;
                     if (!IsActive(type)) continue;
                     if (timerText.Length > 0) timerText.Append('\n');
-                    timerText.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(PowerUpVisualUtility.ColorFor(type)))
-                        .Append('>').Append(type.ToString().ToUpperInvariant()).Append("</color> ")
-                        .Append(Remaining(type).ToString("0.0")).Append('s');
+                    int tenths = displayedTenths[i];
+                    timerText.Append(timerPrefixes[i]).Append(tenths / 10).Append('.').Append(tenths % 10).Append('s');
                 }
-                countdownLabel.text = timerText.ToString();
+                countdownLabel.SetText(timerText);
             }
         }
     }

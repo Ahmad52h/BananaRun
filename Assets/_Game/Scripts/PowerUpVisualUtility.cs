@@ -28,7 +28,7 @@ public static class PowerUpVisualUtility
         Material material;
         if (shader != null)
         {
-            material = new Material(shader) { name = "Runtime Power-Up Glow" };
+            material = new Material(shader) { enableInstancing = true, name = "Runtime Power-Up Glow" };
             material.SetFloat("_Surface", 1f);
             material.SetFloat("_Blend", 0f);
             material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
@@ -46,7 +46,7 @@ public static class PowerUpVisualUtility
             shader = Shader.Find("Sprites/Default");
             if (shader == null) shader = Shader.Find("Unlit/Color");
             if (shader == null) shader = Shader.Find("Hidden/InternalErrorShader");
-            material = new Material(shader) { name = "Runtime Power-Up Glow" };
+            material = new Material(shader) { enableInstancing = true, name = "Runtime Power-Up Glow" };
             material.color = color;
             material.renderQueue = (int)RenderQueue.Transparent;
         }
@@ -63,7 +63,7 @@ public static class PowerUpVisualUtility
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) return CreateGlowMaterial(color);
 
-        var material = new Material(shader) { name = "Runtime Shield Shell" };
+        var material = new Material(shader) { enableInstancing = true, name = "Runtime Shield Shell" };
         material.SetFloat("_Surface", 1f);
         material.SetFloat("_Blend", 0f);
         material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);

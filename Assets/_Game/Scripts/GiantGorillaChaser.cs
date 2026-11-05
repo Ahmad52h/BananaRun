@@ -890,7 +890,7 @@ public sealed class GiantGorillaChaser : MonoBehaviour
             Collider hit = obstacleHits[i];
             obstacleHits[i] = null;
             if (hit == null || hit.transform.position.z >= playerZ - 1f) continue;
-            RunnerObstacle obstacle = hit.GetComponent<RunnerObstacle>();
+            RunnerObstacle obstacle = TrackColliderCache.Get(hit).Obstacle;
             if (obstacle != null) obstacle.TryBreakFromChaser();
         }
     }

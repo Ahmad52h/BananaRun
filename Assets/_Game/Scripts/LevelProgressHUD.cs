@@ -19,6 +19,7 @@ public class LevelProgressHUD : MonoBehaviour
     private float velocity;
     private float rivalDisplayedProgress, rivalVelocity;
     private FinishGate finishGate;
+    private int displayedMeters = -1, displayedLength = -1;
     public float Progress { get; private set; }
     public float RivalProgress { get; private set; }
     public Transform Player => player;
@@ -58,8 +59,14 @@ public class LevelProgressHUD : MonoBehaviour
             if (RivalProgress >= 0.999f) rivalDisplayedProgress = 1f;
             DrawRival(rivalDisplayedProgress);
         }
-        if (distanceLabel != null)
-            distanceLabel.text = $"{Mathf.RoundToInt(Progress * length)} / {Mathf.RoundToInt(length)} m";
+        int meters = Mathf.RoundToInt(Progress * length);
+        int total = Mathf.RoundToInt(length);
+        if (distanceLabel != null && (meters != displayedMeters || total != displayedLength))
+        {
+            displayedMeters = meters;
+            displayedLength = total;
+            distanceLabel.SetText("{0} / {1} m", meters, total);
+        }
     }
 
     private void Draw(float amount)

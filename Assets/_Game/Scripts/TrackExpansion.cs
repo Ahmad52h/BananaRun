@@ -32,6 +32,9 @@ public sealed class TrackExpansion : MonoBehaviour
     private Material splashMaterial;
     private GameObject bridgePrefab;
     private GameObject bananaPrefab;
+    private GameObject sampledBridgePrefab;
+    private Vector3[] nativeBridgeSamples;
+    private float nativeBridgeLength, nativeBridgeWidth;
     private bool playerFalling, rivalFalling;
     private string builtScenePath;
 
@@ -84,6 +87,8 @@ public sealed class TrackExpansion : MonoBehaviour
         }
         if (builtScenePath == scene.path && root != null) return;
 
+        ProceduralTrackStartup.Prepare(scene);
+
         builtScenePath = scene.path;
         playerFalling = false;
         rivalFalling = false;
@@ -130,7 +135,7 @@ public sealed class TrackExpansion : MonoBehaviour
 
     private void BuildFinishBasket(FinishGate gate, Scene scene)
     {
-        var prefab = Resources.Load<GameObject>("Shared/WovenBananaBasket");
+        var prefab = RuntimeResourceCache.Load<GameObject>("Shared/WovenBananaBasket");
         if (prefab == null)
         {
             Debug.LogError("TrackExpansion: missing shared woven banana basket prefab.", this);
@@ -249,7 +254,7 @@ public sealed class TrackExpansion : MonoBehaviour
 
     private void BuildBridges()
     {
-        bridgePrefab = Resources.Load<GameObject>("Track/PT_Wooden_Bridge_02");
+        bridgePrefab = RuntimeResourceCache.Load<GameObject>("Track/PT_Wooden_Bridge_02");
         var course = FindAnyObjectByType<RunnerCourseGenerator>();
         if (course != null) bananaPrefab = course.BananaPrefab;
 
@@ -314,6 +319,8 @@ public sealed class TrackExpansion : MonoBehaviour
 
     private Vector3[] AlignBridgeDeck(GameObject bridge, WaterSpan span, float centerX, float length, float width)
     {
+        if (sampledBridgePrefab == bridgePrefab && nativeBridgeSamples != null)
+            return FitBridgeDeck(bridge, span, centerX, length, width);
         Bounds bounds = RendererBounds(bridge);
         if (bounds.size.x < 0.01f || bounds.size.z < 0.01f) return null;
         var colliders = bridge.GetComponentsInChildren<MeshCollider>(true);
@@ -356,19 +363,31 @@ public sealed class TrackExpansion : MonoBehaviour
         for (int i = 0; i < samples.Count; i++)
             samples[i] = bridge.transform.InverseTransformPoint(samples[i]);
 
+        // All three crossings use the same native prefab. Raycast its geometry once per asset.
+        nativeBridgeSamples = samples.ToArray();
+        nativeBridgeLength = last.z - first.z;
+        nativeBridgeWidth = right - left;
+        sampledBridgePrefab = bridgePrefab;
+        return FitBridgeDeck(bridge, span, centerX, length, width);
+    }
+
+    private Vector3[] FitBridgeDeck(GameObject bridge, WaterSpan span, float centerX, float length, float width)
+    {
+        var samples = nativeBridgeSamples;
+
         // Fit the actual plank endpoints rather than the off-centre decorative
         // AABB. Preserve a gentle arch (~30 cm), then level BOTH ends to dirt.
-        bridge.transform.localScale = new Vector3(length / (last.z - first.z), 0.6f, width / (right - left));
-        first = bridge.transform.TransformPoint(samples[0]);
-        last = bridge.transform.TransformPoint(samples[samples.Count - 1]);
+        bridge.transform.localScale = new Vector3(length / nativeBridgeLength, 0.6f, width / nativeBridgeWidth);
+        Vector3 first = bridge.transform.TransformPoint(samples[0]);
+        Vector3 last = bridge.transform.TransformPoint(samples[samples.Length - 1]);
         float pitch = Mathf.Atan2(last.y - first.y, last.z - first.z) * Mathf.Rad2Deg;
         bridge.transform.rotation = Quaternion.AngleAxis(pitch, Vector3.right) * bridge.transform.rotation;
         first = bridge.transform.TransformPoint(samples[0]);
-        last = bridge.transform.TransformPoint(samples[samples.Count - 1]);
+        last = bridge.transform.TransformPoint(samples[samples.Length - 1]);
         bridge.transform.position += new Vector3(centerX, GroundTopY, span.Center) - (first + last) * 0.5f;
 
-        var profile = new Vector3[samples.Count + 2];
-        for (int i = 0; i < samples.Count; i++)
+        var profile = new Vector3[samples.Length + 2];
+        for (int i = 0; i < samples.Length; i++)
         {
             Vector3 point = bridge.transform.TransformPoint(samples[i]);
             profile[i + 1] = new Vector3(centerX, point.y, point.z);
@@ -437,9 +456,7 @@ public sealed class TrackExpansion : MonoBehaviour
 
     private void SpawnBanana(Transform parent, Vector3 visibleCenter)
     {
-        var pickup = Instantiate(bananaPrefab, visibleCenter, bananaPrefab.transform.rotation, parent);
-        var sphere = pickup.GetComponent<SphereCollider>();
-        if (sphere != null) pickup.transform.position += visibleCenter - pickup.transform.TransformPoint(sphere.center);
+        ProceduralTrackPool.Schedule(bananaPrefab, visibleCenter, bananaPrefab.transform.rotation, parent, true);
     }
 
     private void BuildApproachScenery()
@@ -549,9 +566,9 @@ public sealed class TrackExpansion : MonoBehaviour
 
     private Material LoadWaterMaterial()
     {
-        var source = Resources.Load<Material>("Track/PT_Water_mat");
+        var source = RuntimeResourceCache.Load<Material>("Track/PT_Water_mat");
         if (source != null && source.shader != null && source.shader.isSupported)
-            return new Material(source) { name = "Bridge Water (Runtime)" };
+            return RuntimeAssetOwner.Own(new Material(source) { enableInstancing = true, name = "Bridge Water (Runtime)" }, root);
         return CreateWaterFallback();
     }
 
@@ -562,7 +579,7 @@ public sealed class TrackExpansion : MonoBehaviour
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
         if (shader == null) shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Hidden/InternalErrorShader");
-        var material = new Material(shader) { name = "Bridge Water (Fallback)" };
+        var material = new Material(shader) { enableInstancing = true, name = "Bridge Water (Fallback)" };
         Color color = new Color(0.16f, 0.65f, 0.75f, 0.78f);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
@@ -573,7 +590,7 @@ public sealed class TrackExpansion : MonoBehaviour
         if (material.HasProperty("_ZWrite")) material.SetFloat("_ZWrite", 0f);
         material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-        return material;
+        return RuntimeAssetOwner.Own(material, active != null ? active.root : null);
     }
 
     private static Material MakeMaterial(Color color, string name)
@@ -583,10 +600,10 @@ public sealed class TrackExpansion : MonoBehaviour
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
         if (shader == null) shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Hidden/InternalErrorShader");
-        var material = new Material(shader) { name = name };
+        var material = new Material(shader) { enableInstancing = true, name = name };
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
-        return material;
+        return RuntimeAssetOwner.Own(material, active != null ? active.root : null);
     }
 
     // ---------------------------------------------------------------------
@@ -752,9 +769,9 @@ public sealed class TrackExpansion : MonoBehaviour
         Shader shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null) return MakeMaterial(Color.white, "Bridge Splash");
-        var material = new Material(shader) { name = "Bridge Splash" };
+        var material = new Material(shader) { enableInstancing = true, name = "Bridge Splash" };
         if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
-        return material;
+        return RuntimeAssetOwner.Own(material, active != null ? active.root : null);
     }
 }

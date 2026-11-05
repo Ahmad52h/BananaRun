@@ -5,6 +5,8 @@ using UnityEngine;
 public class CoconutPickup : MonoBehaviour
 {
     private bool collected;
+    public bool IsCollected => collected;
+    internal void ResetForSpawn() => collected = false;
 
     private void Awake()
     {
@@ -15,10 +17,7 @@ public class CoconutPickup : MonoBehaviour
         body.isKinematic = true;
     }
 
-    private void OnEnable()
-    {
-        collected = false;
-    }
+    private void Start() => TrackDistanceStreamer.Register(gameObject);
 
     private void OnTriggerEnter(Collider other)
     {

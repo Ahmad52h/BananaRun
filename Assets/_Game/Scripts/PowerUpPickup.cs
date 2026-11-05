@@ -19,6 +19,12 @@ public class PowerUpPickup : MonoBehaviour
     private float bobPhase;
 
     public PowerUpType Type => type;
+    public bool IsCollected => collected;
+    internal void ResetForSpawn()
+    {
+        collected = false;
+        AlignToGround();
+    }
     public ParticleSystem CollectionEffect => collectionEffect;
     public float HoverHeight => hoverHeight;
 
@@ -96,7 +102,7 @@ public class PowerUpPickup : MonoBehaviour
     private void ReplaceWithBtmVisual()
     {
         string resourceName = BtmResourceFolder + type;
-        var prefab = Resources.Load<GameObject>(resourceName);
+        var prefab = RuntimeResourceCache.Load<GameObject>(resourceName);
         if (prefab == null)
         {
             Debug.LogWarning($"Could not load BTM {type} pickup visual at Resources/{resourceName}. " +
@@ -195,8 +201,8 @@ public class PowerUpPickup : MonoBehaviour
         var renderer = fallback.GetComponent<MeshRenderer>();
         if (renderer != null)
         {
-            renderer.material = PowerUpVisualUtility.CreateGlowMaterial(
-                new Color(0.88f, 0.86f, 0.78f, 0.9f));
+            renderer.sharedMaterial = RuntimeAssetOwner.Own(PowerUpVisualUtility.CreateGlowMaterial(
+                new Color(0.88f, 0.86f, 0.78f, 0.9f)), this);
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = false;
         }
@@ -242,22 +248,8 @@ public class PowerUpPickup : MonoBehaviour
     private void PlayCollectionEffect(bool withAudio)
     {
         if (collectionEffect == null) return;
-        var effect = Instantiate(collectionEffect,
-            transform.position + Vector3.up * hoverHeight, Quaternion.identity);
-        // The rival may collect pickups, but pickup audio belongs to the Player.
-        if (!withAudio)
-        {
-            foreach (var source in effect.GetComponentsInChildren<AudioSource>(true))
-            {
-                source.mute = true;
-                source.enabled = false;
-            }
-        }
-        var main = effect.main;
-        main.loop = false;
-        main.stopAction = ParticleSystemStopAction.Destroy;
-        effect.Play(true);
+        PickupEffectPool.Play(collectionEffect, transform.position + Vector3.up * hoverHeight, withAudio);
     }
 
-    private void OnEnable() => collected = false;
+    private void Start() => TrackDistanceStreamer.Register(gameObject);
 }

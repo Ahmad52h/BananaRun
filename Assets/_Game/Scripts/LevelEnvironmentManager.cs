@@ -170,7 +170,7 @@ public sealed class LevelEnvironmentManager : MonoBehaviour
             sunlight.color = Blend(morning.sunlight, jungle.sunlight, sunset.sunlight, jungleBlend, sunsetBlend);
             sunlight.intensity = Blend(morning.sunIntensity, jungle.sunIntensity, sunset.sunIntensity, jungleBlend, sunsetBlend);
             sunlight.shadowStrength = Blend(morning.shadowStrength, jungle.shadowStrength, sunset.shadowStrength, jungleBlend, sunsetBlend);
-            sunlight.shadows = LightShadows.Soft;
+            sunlight.shadows = MobilePerformanceBootstrap.IsMobileProfileActive ? LightShadows.Hard : LightShadows.Soft;
             sunlight.useColorTemperature = false;
             float elevation = Blend(morning.sunElevation, jungle.sunElevation, sunset.sunElevation, jungleBlend, sunsetBlend);
             Vector3 angles = originalSunRotation.eulerAngles;
@@ -235,7 +235,7 @@ public sealed class LevelEnvironmentManager : MonoBehaviour
         Material template = skyboxTemplate != null ? skyboxTemplate : originalSkybox;
         if (template != null && template.HasProperty("_SkyTint") && template.HasProperty("_AtmosphereThickness"))
         {
-            runtimeSkybox = new Material(template) { name = "Level sky (runtime)", hideFlags = HideFlags.DontSave };
+            runtimeSkybox = new Material(template) { enableInstancing = true, name = "Level sky (runtime)", hideFlags = HideFlags.DontSave };
             RenderSettings.skybox = runtimeSkybox;
         }
         else Debug.LogWarning("Assign a Skybox/Procedural material to LevelEnvironmentManager to animate the sky.", this);

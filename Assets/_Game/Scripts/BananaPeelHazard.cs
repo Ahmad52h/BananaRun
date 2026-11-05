@@ -7,6 +7,7 @@ public class BananaPeelHazard : MonoBehaviour
     [SerializeField] private AudioClip slipSound;
     [SerializeField] private ParticleSystem slipPuff;
     private bool consumed;
+    public bool IsConsumed => consumed;
 
     private void Awake()
     {

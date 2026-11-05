@@ -78,6 +78,7 @@ public sealed class RivalRunner : MonoBehaviour
     private bool highJumpRequested;
     private bool bombLaunched;
     private RottenBananaBomb bombTrapPrefab;
+    private BombDropper playerBombSource;
     private float nextBombDrop;
     private Vector3 originalModelScale = Vector3.one;
 
@@ -129,6 +130,7 @@ public sealed class RivalRunner : MonoBehaviour
         if (rivalModel == null && animator != null) rivalModel = animator.transform;
         if (rivalModel != null) originalModelScale = rivalModel.localScale;
         var bombSource = player != null ? player.GetComponent<BombDropper>() : null;
+        playerBombSource = bombSource;
         if (bombSource != null) bombTrapPrefab = bombSource.TrapPrefab;
         CurrentBombs = Mathf.Clamp(startingBombs, 0, maxBombs);
         lastGroundedPosition = transform.position;
@@ -295,7 +297,7 @@ public sealed class RivalRunner : MonoBehaviour
         Collider obstacle = ObstacleInLane(lane);
         if (obstacle == null) { ChooseBananaLane(); return; }
         float speed = Mathf.Max(1f, CurrentSpeed);
-        var slideObstacle = obstacle.GetComponentInParent<RunnerObstacle>();
+        var slideObstacle = TrackColliderCache.Get(obstacle).Obstacle;
         if (slideObstacle != null && slideObstacle.CanSlideUnder &&
             obstacle.bounds.min.y > controller.bounds.min.y + 0.65f)
         {
@@ -517,15 +519,15 @@ public sealed class RivalRunner : MonoBehaviour
             if (ahead < 1.5f || Mathf.Abs(position.x - (centerX + candidate * player.LaneDistance)) > 0.8f) continue;
 
             // A bomb slot is worth crossing lanes for until the rival is full.
-            var bomb = bananaProbes[i].GetComponentInParent<BombPickup>();
+            var bomb = TrackColliderCache.Get(bananaProbes[i]).Bomb;
             if (bomb != null)
             {
                 if (CurrentBombs < maxBombs) score += 5f / Mathf.Max(2f, ahead);
                 continue;
             }
 
-            var banana = bananaProbes[i].GetComponentInParent<BananaPickup>();
-            var powerUp = bananaProbes[i].GetComponentInParent<PowerUpPickup>();
+            var banana = TrackColliderCache.Get(bananaProbes[i]).Banana;
+            var powerUp = TrackColliderCache.Get(bananaProbes[i]).PowerUp;
             if (powerUp != null && powerUp.isActiveAndEnabled)
             {
                 score += 6f / Mathf.Max(2f, ahead);
@@ -659,15 +661,12 @@ public sealed class RivalRunner : MonoBehaviour
 
     private bool IsObstacle(Collider collider) => collider != null && collider.enabled &&
         !(collider is TerrainCollider) &&
-        collider.GetComponentInParent<BridgeDeck>() == null &&
+        TrackColliderCache.Get(collider).Bridge == null &&
         !collider.transform.IsChildOf(transform) && !collider.transform.IsChildOf(player.transform) &&
         (IsHazard(collider) || (!collider.isTrigger && collider.bounds.max.y > controller.bounds.min.y + 0.15f));
 
     private static bool IsHazard(Collider collider) => collider != null && collider.enabled &&
-        (collider.GetComponentInParent<RunnerObstacle>() != null ||
-         collider.GetComponentInParent<BananaPeelHazard>() != null ||
-         collider.GetComponentInParent<FallingCoconutHazard>() != null ||
-         collider.GetComponentInParent<DynamicRunnerHazard>() != null);
+        TrackColliderCache.Get(collider).IsHazard;
 
     private void OnTriggerEnter(Collider other) => TouchHazard(other);
     private void OnTriggerStay(Collider other) => TouchHazard(other);
@@ -678,7 +677,7 @@ public sealed class RivalRunner : MonoBehaviour
 
     private void TouchHazard(Collider other)
     {
-        var obstacle = other.GetComponentInParent<RunnerObstacle>();
+        var obstacle = TrackColliderCache.Get(other).Obstacle;
         if (HasBulldozer && obstacle != null)
         {
             obstacle.Shatter();
@@ -692,6 +691,7 @@ public sealed class RivalRunner : MonoBehaviour
     {
         if (HasFinished || recoveringFall || !isActiveAndEnabled || controller == null || !controller.enabled)
             return false;
+        RunnerMagnetTargets.Invalidate();
         switch (type)
         {
             case PowerUpType.Bulldozer:
@@ -743,7 +743,7 @@ public sealed class RivalRunner : MonoBehaviour
         var prefab = bombTrapPrefab;
         if (prefab == null && player != null)
         {
-            var source = player.GetComponent<BombDropper>();
+            var source = playerBombSource;
             if (source != null) prefab = source.TrapPrefab;
         }
         if (prefab == null) return false;
@@ -756,9 +756,8 @@ public sealed class RivalRunner : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             var hit = bombGroundHits[i];
-            if (hit.collider.GetComponentInParent<RunnerMotor>() != null ||
-                hit.collider.GetComponentInParent<RivalRunner>() != null ||
-                hit.collider.GetComponentInParent<RunnerObstacle>() != null || hit.normal.y < 0.65f ||
+            var info = TrackColliderCache.Get(hit.collider);
+            if (info.Player != null || info.Rival != null || info.Obstacle != null || hit.normal.y < 0.65f ||
                 hit.distance >= distance) continue;
             point.y = hit.point.y;
             distance = hit.distance;

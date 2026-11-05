@@ -350,7 +350,7 @@ public sealed class MonkeyFootstepDust : MonoBehaviour
         }
 
         generatedTexture = CreateSoftCloudTexture();
-        generatedMaterial = new Material(shader) { name = "Footstep Dust (Generated)" };
+        generatedMaterial = new Material(shader) { enableInstancing = true, name = "Footstep Dust (Generated)" };
 
         if (generatedMaterial.HasProperty("_BaseMap"))
             generatedMaterial.SetTexture("_BaseMap", generatedTexture);

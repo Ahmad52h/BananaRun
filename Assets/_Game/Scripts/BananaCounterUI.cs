@@ -62,9 +62,14 @@ public class BananaCounterUI : MonoBehaviour
         SyncQuota(false);
     }
 
-    private void SyncQuota(bool force)
+    private void Start()
     {
         if (finishGate == null) finishGate = FindAnyObjectByType<FinishGate>();
+        SyncQuota(true);
+    }
+
+    private void SyncQuota(bool force)
+    {
         bool enabled = finishGate != null && finishGate.BananaQuotaEnabled;
         int target = finishGate != null ? finishGate.BananaBasketTarget : 0;
         if (!force && quotaInitialized && enabled == quotaEnabled && target == quotaTarget)

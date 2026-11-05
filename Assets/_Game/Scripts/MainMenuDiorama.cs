@@ -294,7 +294,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
         // Use the original textured finish basket, lid and banana poses. Its
         // shared prefab is unit-height and centred on the woven body's base.
-        GameObject basketPrefab = Resources.Load<GameObject>("Shared/WovenBananaBasket");
+        GameObject basketPrefab = RuntimeResourceCache.Load<GameObject>("Shared/WovenBananaBasket");
         if (basketPrefab != null)
         {
             bananaBasket = Instantiate(basketPrefab, new Vector3(0f, StageTop + 0.02f, 1.8f),
@@ -343,7 +343,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) shader = Shader.Find("Standard");
         if (shader == null) shader = Shader.Find("Unlit/Color");
-        Material material = new Material(shader) { name = name };
+        Material material = new Material(shader) { enableInstancing = true, name = name };
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
         if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", metallic);
@@ -354,7 +354,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
             material.EnableKeyword("_EMISSION");
             if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", emission);
         }
-        return material;
+        return RuntimeAssetOwner.Own(material, Instance);
     }
 
     // ------------------------------------------------------------------
@@ -543,7 +543,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
     private static void ApplyGorillaMaterial(GameObject instance)
     {
-        Material material = Resources.Load<Material>(ResourcesRoot + "M_Gorilla");
+        Material material = RuntimeResourceCache.Load<Material>(ResourcesRoot + "M_Gorilla");
         if (material == null) return;
 
         Renderer[] renderers = instance.GetComponentsInChildren<Renderer>(true);
@@ -1037,7 +1037,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         mesh.triangles = new[] { 0, 2, 1, 2, 3, 1 };
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-        return mesh;
+        return RuntimeAssetOwner.Own(mesh, Instance);
     }
 
     private static Texture2D CreateLeafTexture()
@@ -1075,7 +1075,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
         texture.SetPixels(pixels);
         texture.Apply(false, true);
-        return texture;
+        return RuntimeAssetOwner.Own(texture, Instance);
     }
 
     private static Texture2D CreateGlowTexture()
@@ -1107,7 +1107,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
         texture.SetPixels(pixels);
         texture.Apply(false, true);
-        return texture;
+        return RuntimeAssetOwner.Own(texture, Instance);
     }
 
     private static Material CreateParticleMaterial(string name, Texture2D texture, bool additive)
@@ -1121,7 +1121,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
             return null;
         }
 
-        Material material = new Material(shader) { name = name };
+        Material material = new Material(shader) { enableInstancing = true, name = name };
         if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
         if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
@@ -1142,7 +1142,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
         material.DisableKeyword("_ALPHATEST_ON");
         material.SetOverrideTag("RenderType", "Transparent");
         material.renderQueue = (int)RenderQueue.Transparent;
-        return material;
+        return RuntimeAssetOwner.Own(material, Instance);
     }
 
     // ------------------------------------------------------------------
@@ -1364,7 +1364,7 @@ public sealed class MainMenuDiorama : MonoBehaviour
 
     private static GameObject LoadPrefab(string name)
     {
-        GameObject prefab = Resources.Load<GameObject>(ResourcesRoot + name);
+        GameObject prefab = RuntimeResourceCache.Load<GameObject>(ResourcesRoot + name);
         if (prefab == null)
             Debug.LogWarning("MainMenuDiorama: missing Resources/" + ResourcesRoot + name + ".prefab");
         return prefab;

@@ -35,7 +35,7 @@ public sealed class RaceCountdownUI : MonoBehaviour
         host.transform.SetParent(transform, false);
         var text = host.GetComponent<TextMeshProUGUI>();
         text.font = TMP_Settings.defaultFontAsset;
-        if (text.font == null) text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (text.font == null) text.font = RuntimeResourceCache.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
         text.fontSize = size;
         text.fontStyle = FontStyles.Bold;
         text.alignment = TextAlignmentOptions.Center;

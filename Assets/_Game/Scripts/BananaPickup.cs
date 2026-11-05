@@ -17,7 +17,11 @@ public class BananaPickup : MonoBehaviour
 
     private Renderer[] visualRenderers;
     private bool collected;
+    private SphereCollider pickupCollider;
     public int Value => value;
+    public bool IsCollected => collected;
+    internal void ResetForSpawn() => collected = false;
+    public Vector3 WorldCenter => pickupCollider.bounds.center;
 
     private void Awake()
     {
@@ -25,17 +29,15 @@ public class BananaPickup : MonoBehaviour
             ? visual.GetComponentsInChildren<Renderer>()
             : new Renderer[0];
 
-        GetComponent<SphereCollider>().isTrigger = true;
+        pickupCollider = GetComponent<SphereCollider>();
+        pickupCollider.isTrigger = true;
 
         Rigidbody body = GetComponent<Rigidbody>();
         body.useGravity = false;
         body.isKinematic = true;
     }
 
-    private void OnEnable()
-    {
-        collected = false;
-    }
+    private void Start() => TrackDistanceStreamer.Register(gameObject);
 
     private void Update()
     {
@@ -54,35 +56,8 @@ public class BananaPickup : MonoBehaviour
         }
     }
 
-    private bool TryGetMagnetTarget(out Vector3 target, out float radius)
-    {
-        Vector3 bestTarget = Vector3.zero;
-        float bestRadius = 0f;
-        float nearest = float.MaxValue;
-
-        var player = PowerUpManager.ActivePlayer;
-        if (player != null && player.isActiveAndEnabled && player.IsActive(PowerUpType.Magnet))
-            ConsiderMagnet(player.transform.position + Vector3.up * 0.9f, player.MagnetRadius);
-
-        var rival = RivalRunner.ActiveRival;
-        if (rival != null && rival.isActiveAndEnabled && rival.HasMagnet)
-            ConsiderMagnet(rival.transform.position + Vector3.up * 0.9f, rival.MagnetRadius);
-
-        target = bestTarget;
-        radius = bestRadius;
-        return radius > 0f;
-
-        void ConsiderMagnet(Vector3 candidate, float candidateRadius)
-        {
-            float distance = (candidate - transform.position).sqrMagnitude;
-            if (distance <= candidateRadius * candidateRadius && distance < nearest)
-            {
-                nearest = distance;
-                bestTarget = candidate;
-                bestRadius = candidateRadius;
-            }
-        }
-    }
+    private bool TryGetMagnetTarget(out Vector3 target, out float radius) =>
+        RunnerMagnetTargets.TryGetNearest(transform.position, out target, out radius);
 
     private void OnTriggerEnter(Collider other)
     {
@@ -119,7 +94,7 @@ public class BananaPickup : MonoBehaviour
         if (pickupEffectPrefab == null)
             return;
 
-        Vector3 position = GetComponent<SphereCollider>().bounds.center;
+        Vector3 position = pickupCollider.bounds.center;
 
         // Imported models can have an offset pivot: use visible geometry's center.
         if (visualRenderers.Length > 0)
@@ -131,12 +106,6 @@ public class BananaPickup : MonoBehaviour
         }
 
         // No parent: disabling the banana must not disable its flash.
-        ParticleSystem effect = Instantiate(
-            pickupEffectPrefab, position, Quaternion.identity);
-
-        var main = effect.main;
-        main.loop = false;
-        main.stopAction = ParticleSystemStopAction.Destroy;
-        effect.Play(true);
+        PickupEffectPool.Play(pickupEffectPrefab, position);
     }
 }

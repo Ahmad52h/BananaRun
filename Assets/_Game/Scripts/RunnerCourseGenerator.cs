@@ -9,7 +9,7 @@ public class RunnerCourseGenerator : MonoBehaviour
     [Header("Course")]
     [SerializeField] private RunnerMotor player;
     [SerializeField] private Transform finishLine;
-    [SerializeField, Min(0f)] private float startDistance = 245f;
+    [SerializeField, Min(0f)] private float startDistance = 0f;
     [SerializeField, Min(10f)] private float finishApproach = 25f;
     [SerializeField] private float groundHeight = -0.3f;
     [SerializeField] private int seed = 731;
@@ -131,6 +131,7 @@ public class RunnerCourseGenerator : MonoBehaviour
     }
     private readonly List<ObstacleProfile> palette = new List<ObstacleProfile>();
     private float playerRadius;
+    private bool uniformCourse;
     private bool progressLookupComplete;
     private bool warnedMissingProgress;
 
@@ -152,6 +153,12 @@ public class RunnerCourseGenerator : MonoBehaviour
 
     private void Start()
     {
+        uniformCourse = gameObject.scene.name == "Level01";
+        if (uniformCourse)
+        {
+            ProceduralTrackStartup.Prepare(gameObject.scene);
+            startDistance = 0f; // Override the scene's old 245m boundary without editing YAML.
+        }
         if (player == null)
         {
             Debug.LogWarning("RunnerCourseGenerator cannot build a course: player reference is missing.", this);
@@ -191,7 +198,8 @@ public class RunnerCourseGenerator : MonoBehaviour
         float centerX = player.CenterX;
         float laneWidth = player.LaneDistance;
         float end = finishLine.position.z - finishApproach;
-        float z = Mathf.Max(startDistance, player.transform.position.z + 20f);
+        float z = uniformCourse ? Mathf.Max(30f, player.transform.position.z + 25f) :
+            Mathf.Max(startDistance, player.transform.position.z + 20f);
         if (z >= end)
         {
             Debug.LogWarning("RunnerCourseGenerator cannot build a course: the finish approach starts before the first obstacle row.", this);
@@ -200,7 +208,7 @@ public class RunnerCourseGenerator : MonoBehaviour
         int lastSafeLane = 0, row = 0, powerIndex = 0;
         float previousEnd = z - ReactionDistance - 12f;
         float safeRunStart = previousEnd;
-        float nextPowerUp = z + 55f;
+        float nextPowerUp = uniformCourse ? ProceduralTrackStartup.AuthoredOpeningEnd : z + 55f;
         float lastPowerUpZ = float.NegativeInfinity;
         bool thunderSpawned = false;
         while (z < end)
@@ -223,6 +231,7 @@ public class RunnerCourseGenerator : MonoBehaviour
             IncludeEnvelope(second, stagger, ref back, ref front);
             if (peel) back = Mathf.Max(back, lead + 1.5f);
             back += playerRadius; front += playerRadius;
+            if (uniformCourse) z = Mathf.Max(z, ProceduralTrackStartup.ClearRunwayEnd + back);
             // Different safe lanes may not overlap even at a hazard's maximum backwards travel.
             if (safeLane != lastSafeLane) z = Mathf.Max(z, previousEnd + ReactionDistance + back);
             else z = Mathf.Max(z, safeRunStart + back);
@@ -240,18 +249,30 @@ public class RunnerCourseGenerator : MonoBehaviour
                 continue;
             }
             difficulty = DifficultyAt(z);
+            if (uniformCourse && row == 0 && bananaPrefab != null)
+                for (float pickupZ = ProceduralTrackStartup.ClearRunwayEnd; pickupZ < z - 5.1f; pickupZ += 2.6f)
+                    SpawnPickup(bananaPrefab, new Vector3(centerX, groundHeight + 1.1f, pickupZ));
             SpawnObstacle(first, centerX + firstLane * laneWidth, z);
             SpawnObstacle(second, centerX + secondLane * laneWidth, z + stagger);
             if (peel)
             {
-                Instantiate(bananaPeelPrefab, new Vector3(centerX + firstLane * laneWidth, groundHeight, z - lead), Quaternion.identity, transform);
+                Vector3 point = new Vector3(centerX + firstLane * laneWidth, groundHeight, z - lead);
+                if (uniformCourse) ProceduralTrackPool.Schedule(bananaPeelPrefab.gameObject, point, Quaternion.identity, transform);
+                else Instantiate(bananaPeelPrefab, point, Quaternion.identity, transform);
                 SpawnedPeelCount++;
             }
             if (droppingCoconut)
             {
-                var tree = Instantiate(sceneryPrefabs[0], new Vector3(centerX - 8f, groundHeight, z - 2f), Quaternion.identity, transform);
-                foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
-                tree.AddComponent<FallingCoconutSpawner>().Configure(player, fallingCoconutPrefab, firstLane);
+                Vector3 point = new Vector3(centerX - 8f, groundHeight, z - 2f);
+                if (uniformCourse)
+                    ProceduralTrackPool.Schedule(sceneryPrefabs[0], point, Quaternion.identity, transform,
+                        course: this, fallingPrefab: fallingCoconutPrefab, coconutLane: firstLane, decoration: true);
+                else
+                {
+                    var tree = Instantiate(sceneryPrefabs[0], point, Quaternion.identity, transform);
+                    foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                    tree.AddComponent<FallingCoconutSpawner>().Configure(player, fallingCoconutPrefab, firstLane);
+                }
             }
             if (bananaPrefab != null)
             {
@@ -274,12 +295,7 @@ public class RunnerCourseGenerator : MonoBehaviour
                 int kind = powerIndex++ % powerUpPrefabs.Length;
                 if (powerUpPrefabs[kind] != null)
                 {
-                    var pickup = Instantiate(powerUpPrefabs[kind],
-                        new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1),
-                        Quaternion.identity, transform);
-                    // Generated Shield/Thunder templates start inactive so their
-                    // Awake can build the model at the final world spawn point.
-                    if (!pickup.gameObject.activeSelf) pickup.gameObject.SetActive(true);
+                    SpawnPowerUp(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1));
                     lastPowerUpZ = z;
                     if (powerUpPrefabs[kind].Type == PowerUpType.Thunder) thunderSpawned = true;
                     if (powerUpPrefabs[kind].Type == PowerUpType.Glider && bananaPrefab != null && random.NextDouble() < highBananaFrequency)
@@ -296,7 +312,8 @@ public class RunnerCourseGenerator : MonoBehaviour
                         }
                     }
                 }
-                nextPowerUp = z + powerUpSpacing / Mathf.Lerp(1f, powerUpFrequencyMultiplier, difficulty);
+                nextPowerUp = z + (uniformCourse && z < ProceduralTrackStartup.AuthoredOpeningEnd ? 40f :
+                    powerUpSpacing / Mathf.Lerp(1f, powerUpFrequencyMultiplier, difficulty));
             }
             sections.Add(new Section(z, z - back, z + front, difficulty, safeLane));
             if (safeLane != lastSafeLane) safeRunStart = z - back;
@@ -309,6 +326,7 @@ public class RunnerCourseGenerator : MonoBehaviour
                 Mathf.Lerp(easyObstacleSpacing, hardObstacleSpacing, difficulty) * jitter
                 / Mathf.Lerp(1f, obstacleFrequencyMultiplier, difficulty));
         }
+        if (uniformCourse) thunderSpawned |= ScheduleOpeningPowerUps();
         // Guarantee that the Speed Boost pickup exists even if the cadence or a
         // river skip consumed its slot. A safe generated row is always preferred;
         // reusing the final safe row is a last-resort fallback.
@@ -346,10 +364,8 @@ public class RunnerCourseGenerator : MonoBehaviour
 
                 if (found)
                 {
-                    var pickup = Instantiate(powerUpPrefabs[thunderIndex],
-                        new Vector3(centerX + target.SafeLane * laneWidth, groundHeight + 1.15f, target.Z + 1f),
-                        Quaternion.identity, transform);
-                    if (!pickup.gameObject.activeSelf) pickup.gameObject.SetActive(true);
+                    SpawnPowerUp(powerUpPrefabs[thunderIndex],
+                        new Vector3(centerX + target.SafeLane * laneWidth, groundHeight + 1.15f, target.Z + 1f));
                 }
             }
         }
@@ -361,29 +377,24 @@ public class RunnerCourseGenerator : MonoBehaviour
 
     private void BuildScenery(System.Random random, float centerX)
     {
+        if (uniformCourse)
+            foreach (var scenery in FindObjectsByType<TropicalScenery>())
+                if (scenery.gameObject.scene == gameObject.scene && scenery.HasBorderPrefabs) return;
         if (sceneryPrefabs == null || sceneryPrefabs.Length == 0) return;
-        for (float z = startDistance - 10; z < finishLine.position.z + 15; z += Mathf.Max(6, scenerySpacing))
+        for (float z = uniformCourse ? 0f : startDistance - 10; z < finishLine.position.z + 15; z += Mathf.Max(6, scenerySpacing))
             for (int side = -1; side <= 1; side += 2)
             {
                 if (z > gapStart - 2f && z < gapEnd + 2f) continue;
                 if (IsInsideWaterZone(z, 5f)) continue;
                 var prefab = sceneryPrefabs[random.Next(sceneryPrefabs.Length)];
                 if (prefab == null) continue;
-                var tree = Instantiate(prefab, new Vector3(centerX + side * (7f + (float)random.NextDouble() * 5f), groundHeight, z),
-                    Quaternion.Euler(0, random.Next(360), 0), transform);
-                tree.transform.localScale *= Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble());
-                foreach (var collider in tree.GetComponentsInChildren<Collider>()) collider.enabled = false;
-                // Dropping palms are authored with obstacle rows so they cannot target the safe lane.
-                var outerTree = Instantiate(prefab, new Vector3(centerX + side * (17f + (float)random.NextDouble() * 4f), groundHeight, z + 5),
-                    Quaternion.Euler(0, random.Next(360), 0), transform);
-                foreach (var collider in outerTree.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                SpawnDecoration(prefab, new Vector3(centerX + side * (7f + (float)random.NextDouble() * 5f), groundHeight, z),
+                    Quaternion.Euler(0, random.Next(360), 0), Mathf.Lerp(0.8f, 1.2f, (float)random.NextDouble()));
+                SpawnDecoration(prefab, new Vector3(centerX + side * (17f + (float)random.NextDouble() * 4f), groundHeight, z + 5),
+                    Quaternion.Euler(0, random.Next(360), 0), 1f);
                 if (roadsideShrubPrefab != null)
-                {
-                    var shrub = Instantiate(roadsideShrubPrefab, new Vector3(centerX + side * 6.7f, groundHeight, z + 3),
-                        Quaternion.Euler(0, random.Next(360), 0), transform);
-                    shrub.transform.localScale *= 0.65f;
-                    foreach (var collider in shrub.GetComponentsInChildren<Collider>()) collider.enabled = false;
-                }
+                    SpawnDecoration(roadsideShrubPrefab, new Vector3(centerX + side * 6.7f, groundHeight, z + 3),
+                        Quaternion.Euler(0, random.Next(360), 0), 0.65f);
             }
     }
 
@@ -395,7 +406,7 @@ public class RunnerCourseGenerator : MonoBehaviour
         for (int i = 0; i < highBananaCount; i++)
         {
             float t = (i + 1f) / (highBananaCount + 1f);
-            SpawnPickup(bananaPrefab, new Vector3(x, groundHeight + 1f + (apex - 1f) * 4f * t * (1f - t), start + length * t)).transform.SetParent(path, true);
+            SpawnPickup(bananaPrefab, new Vector3(x, groundHeight + 1f + (apex - 1f) * 4f * t * (1f - t), start + length * t), path);
         }
         HighBananaPathCount++;
     }
@@ -403,6 +414,12 @@ public class RunnerCourseGenerator : MonoBehaviour
     private void SpawnObstacle(ObstacleProfile profile, float x, float z)
     {
         if (profile == null) return;
+        if (uniformCourse)
+        {
+            ProceduralTrackPool.Schedule(profile.prefab, new Vector3(x, groundHeight, z), Quaternion.identity, transform, course: this);
+            SpawnedObstacleCount++;
+            return;
+        }
         var obstacle = Instantiate(profile.prefab, new Vector3(x, groundHeight, z), Quaternion.identity, transform);
         foreach (var hazard in obstacle.GetComponentsInChildren<DynamicRunnerHazard>(true)) hazard.Configure(player, this);
         SpawnedObstacleCount++;
@@ -467,7 +484,7 @@ public class RunnerCourseGenerator : MonoBehaviour
     private void EnsureRuntimePowerUpPalette()
     {
         var runtime = new List<PowerUpPickup>();
-        bool hasShield = false, hasThunder = false;
+        bool hasShield = false, hasThunder = false, hasMagnet = false;
         ParticleSystem effect = null;
         if (powerUpPrefabs != null)
         {
@@ -477,6 +494,7 @@ public class RunnerCourseGenerator : MonoBehaviour
                 runtime.Add(pickup);
                 if (pickup.Type == PowerUpType.Shield) hasShield = true;
                 if (pickup.Type == PowerUpType.Thunder) hasThunder = true;
+                if (pickup.Type == PowerUpType.Magnet) hasMagnet = true;
                 if (effect == null && pickup.CollectionEffect != null) effect = pickup.CollectionEffect;
             }
         }
@@ -485,6 +503,8 @@ public class RunnerCourseGenerator : MonoBehaviour
         // runtime instead of touching the scene asset.
         if (!hasShield) runtime.Add(PowerUpPickup.CreateTemplate(PowerUpType.Shield, effect));
         if (!hasThunder) runtime.Add(PowerUpPickup.CreateTemplate(PowerUpType.Thunder, effect));
+        if (uniformCourse && !hasMagnet) runtime.Add(PowerUpPickup.CreateTemplate(PowerUpType.Magnet, effect));
+        if (uniformCourse) runtime.Sort((a, b) => OpeningPowerUpOrder(a.Type).CompareTo(OpeningPowerUpOrder(b.Type)));
         powerUpPrefabs = runtime.ToArray();
 
         // Fit the expanded palette inside the existing course. The original
@@ -502,12 +522,74 @@ public class RunnerCourseGenerator : MonoBehaviour
         }
     }
 
-    private GameObject SpawnPickup(GameObject prefab, Vector3 visibleCenter)
+    private static int OpeningPowerUpOrder(PowerUpType type) => type == PowerUpType.Shield ? 0 :
+        type == PowerUpType.Thunder ? 1 : type == PowerUpType.Magnet ? 2 : type == PowerUpType.Bulldozer ? 3 : 4;
+
+    private bool ScheduleOpeningPowerUps()
     {
-        var pickup = Instantiate(prefab, visibleCenter, prefab.transform.rotation, transform);
-        var sphere = pickup.GetComponent<SphereCollider>();
-        if (sphere != null) pickup.transform.position += visibleCenter - pickup.transform.TransformPoint(sphere.center);
-        return pickup;
+        bool thunder = false;
+        float previous = float.NegativeInfinity;
+        var types = new[] { PowerUpType.Shield, PowerUpType.Thunder, PowerUpType.Magnet };
+        var targets = new[] { 52f, 105f, 170f };
+        for (int i = 0; i < types.Length; i++)
+        {
+            int selected = -1;
+            float best = float.PositiveInfinity;
+            for (int j = 0; j < sections.Count; j++)
+            {
+                var section = sections[j];
+                if (section.Z <= previous + 20f || section.Z + 1f >= ProceduralTrackStartup.AuthoredOpeningEnd) continue;
+                float distance = Mathf.Abs(section.Z - targets[i]);
+                if (distance < best) { selected = j; best = distance; }
+            }
+            if (selected < 0) continue;
+            var target = sections[selected];
+            foreach (var prefab in powerUpPrefabs)
+            {
+                if (prefab == null || prefab.Type != types[i]) continue;
+                SpawnPowerUp(prefab, new Vector3(player.CenterX + target.SafeLane * player.LaneDistance,
+                    groundHeight + 1.15f, target.Z + 1f));
+                previous = target.Z;
+                if (types[i] == PowerUpType.Thunder) thunder = true;
+                break;
+            }
+        }
+        return thunder;
+    }
+
+    private void SpawnPowerUp(PowerUpPickup prefab, Vector3 position)
+    {
+        if (uniformCourse) ProceduralTrackPool.Schedule(prefab.gameObject, position, Quaternion.identity, transform);
+        else
+        {
+            var pickup = Instantiate(prefab, position, Quaternion.identity, transform);
+            if (!pickup.gameObject.activeSelf) pickup.gameObject.SetActive(true);
+        }
+    }
+
+    private void SpawnDecoration(GameObject prefab, Vector3 position, Quaternion rotation, float scale)
+    {
+        if (uniformCourse)
+            ProceduralTrackPool.Schedule(prefab, position, rotation, transform, decoration: true, scale: scale);
+        else
+        {
+            var instance = Instantiate(prefab, position, rotation, transform);
+            instance.transform.localScale *= scale;
+            foreach (var collider in instance.GetComponentsInChildren<Collider>()) collider.enabled = false;
+        }
+    }
+
+    private void SpawnPickup(GameObject prefab, Vector3 visibleCenter, Transform parent = null)
+    {
+        if (parent == null) parent = transform;
+        if (uniformCourse)
+            ProceduralTrackPool.Schedule(prefab, visibleCenter, prefab.transform.rotation, parent, true);
+        else
+        {
+            var pickup = Instantiate(prefab, visibleCenter, prefab.transform.rotation, parent);
+            var sphere = pickup.GetComponent<SphereCollider>();
+            if (sphere != null) pickup.transform.position += visibleCenter - pickup.transform.TransformPoint(sphere.center);
+        }
     }
 
     private void OnValidate()

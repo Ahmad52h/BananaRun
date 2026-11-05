@@ -242,7 +242,7 @@ public class VineSwingZone : MonoBehaviour
         {
             var banana = swingBananas[i];
             if (banana == null || !banana.gameObject.activeSelf) continue;
-            Vector3 center = banana.GetComponent<SphereCollider>().bounds.center;
+            Vector3 center = banana.WorldCenter;
             float t = step.sqrMagnitude > 0.0001f ? Mathf.Clamp01(Vector3.Dot(center - previousBananaProbe, step) / step.sqrMagnitude) : 0f;
             if ((center - (previousBananaProbe + step * t)).sqrMagnitude <= 0.85f * 0.85f)
                 banana.TryCollect(bananaInventory);

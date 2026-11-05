@@ -24,6 +24,8 @@ public class RunnerObstacle : MonoBehaviour
 
     private bool touched;
     private bool broken;
+    public bool IsBroken => broken;
+    public bool WillBeDestroyed { get; private set; }
     public bool CanSlideUnder => canSlideUnder;
     public bool CanBreakFromProjectile => breakable && !broken;
     public bool BreaksOnPlayerHit => breakOnPlayerHit &&
@@ -195,6 +197,7 @@ public class RunnerObstacle : MonoBehaviour
         {
             // Independent fragments/particles remain visible after the intact mesh is removed.
             removalRoot.SetActive(false);
+            WillBeDestroyed = true;
             Destroy(removalRoot);
         }
         else gameObject.SetActive(false);

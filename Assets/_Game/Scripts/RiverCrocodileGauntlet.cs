@@ -176,6 +176,9 @@ public sealed class RiverCrocodileGauntlet : MonoBehaviour
             z > riverStartZ + 0.05f && z < riverEndZ - 0.05f;
     }
 
+    public bool OverlapsRiverGap(float start, float end) => riverEndZ > riverStartZ &&
+        end > riverStartZ && start < riverEndZ;
+
     private void CreateVine(Transform vineRoot, Transform triggerSource, Transform landingSource,
         Transform pivotSource, Transform vineSource, Transform canopySource, float laneX, int laneId,
         List<float> laneXs)
@@ -407,10 +410,10 @@ public sealed class RiverCrocodileGauntlet : MonoBehaviour
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
         if (shader == null) shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Hidden/InternalErrorShader");
-        var material = new Material(shader) { name = name, color = color };
+        var material = new Material(shader) { enableInstancing = true, name = name, color = color };
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
         if (material.HasProperty("_Color")) material.SetColor("_Color", color);
-        return material;
+        return RuntimeAssetOwner.Own(material, Active);
     }
 
     private static Material MakeParticleMaterial()
@@ -418,10 +421,10 @@ public sealed class RiverCrocodileGauntlet : MonoBehaviour
         Shader shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null) return MakeMaterial(Color.white, "Crocodile Splash");
-        var material = new Material(shader) { name = "Crocodile Splash" };
+        var material = new Material(shader) { enableInstancing = true, name = "Crocodile Splash" };
         if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
         if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
-        return material;
+        return RuntimeAssetOwner.Own(material, Active);
     }
 
     public void HandlePlayerFall(PlayerHealth health)
