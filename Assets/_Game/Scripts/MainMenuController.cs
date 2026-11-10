@@ -13,6 +13,7 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private CharacterSelector characterSelector;
     private bool loading;
     private ResponsiveMenuContent responsiveMenu;
+    private UnityEngine.UI.Button storyButton;
 
     private void Awake()
     {
@@ -25,6 +26,9 @@ public sealed class MainMenuController : MonoBehaviour
     {
         Time.timeScale = 1f;
         responsiveMenu?.Apply();
+        // Both entry points lead to the automatic Level01 story before the countdown.
+        if (playButton != null)
+            storyButton = StoryNarrativeUI.AddMenuButton(playButton, Play);
         if (monkey != null)
         {
             monkey.applyRootMotion = false;
@@ -72,6 +76,7 @@ public sealed class MainMenuController : MonoBehaviour
         Time.timeScale = 1f;
         AudioListener.pause = false;
         playButton.interactable = false;
+        if (storyButton != null) storyButton.interactable = false;
         fade.blocksRaycasts = true;
         SettingsPanelController.Save();
 

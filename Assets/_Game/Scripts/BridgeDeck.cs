@@ -11,6 +11,7 @@ public sealed class BridgeDeck : MonoBehaviour
     private Vector3[] profile;
     private float centerX, halfWidth;
     private Mesh surfaceMesh;
+    public float StartZ => profile != null && profile.Length > 0 ? profile[0].z : float.PositiveInfinity;
 
     private void OnEnable() => decks.Add(this);
     private void OnDisable() => decks.Remove(this);

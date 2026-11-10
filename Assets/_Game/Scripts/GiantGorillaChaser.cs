@@ -119,6 +119,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     public Transform CurrentTarget => catchStarted && player != null ? player.transform : chaseTarget;
     public bool IsCatchingPlayer => catchStarted;
+    public bool IsClosingOnPlayer => initialized && !startingIntimidation && !catchStarted &&
+        !IsBombStunned && visibility == VisibilityState.HitReveal && player != null &&
+        chaseTarget == player.transform && currentGap <= hitRevealGap + 1.5f;
     public bool HasCaughtPlayer => catchLocked;
     private float TargetSpeed => rival != null && chaseTarget == rival.transform ? rival.CurrentSpeed : player.CurrentSpeed;
 

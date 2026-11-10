@@ -70,36 +70,62 @@ public class RunnerCamera : MonoBehaviour
     private Vector3 introPosition, introLookPoint;
     private Quaternion introRotation;
     private float introFov, introReturnAge, introReturnDuration, introShakeAge = 10f;
+    private Vector3 guardianPosition, guardianFocus, rivalPosition, rivalFocus;
+    private float introAge;
+    private bool storyShot;
+    private Vector3 storyPosition, storyFocus, storyRight;
+    private float storyProgress;
+
+    public void BeginStoryShot(Bounds subject, Vector3 direction)
+    {
+        if (view == null) view = GetComponent<Camera>();
+        storyShot = true;
+        storyProgress = 0f;
+        storyFocus = subject.center;
+        storyPosition = FrameSubject(subject, direction, 56f);
+        storyRight = Vector3.Cross(Vector3.up, -direction).normalized;
+    }
+
+    public void SetStoryProgress(float progress) => storyProgress = progress;
+    public void EndStoryShot() => storyShot = false;
+
+    // Fit by projected corners, including the portrait horizontal FOV. Leave space
+    // below the subject for the comic caption without cropping the gorilla's head.
+    private Vector3 FrameSubject(Bounds bounds, Vector3 direction, float fov)
+    {
+        direction.Normalize();
+        Quaternion rotation = Quaternion.LookRotation(-direction, Vector3.up);
+        Quaternion inverse = Quaternion.Inverse(rotation);
+        float vertical = Mathf.Tan(fov * Mathf.Deg2Rad * 0.5f);
+        float horizontal = vertical * (view != null ? Mathf.Max(0.2f, view.aspect) : 0.5625f);
+        float distance = 3f;
+        for (int x = -1; x <= 1; x += 2)
+            for (int y = -1; y <= 1; y += 2)
+                for (int z = -1; z <= 1; z += 2)
+                {
+                    Vector3 corner = inverse * Vector3.Scale(bounds.extents, new Vector3(x, y, z));
+                    distance = Mathf.Max(distance, Mathf.Abs(corner.x) / (horizontal * 0.78f) - corner.z,
+                        Mathf.Abs(corner.y) / (vertical * 0.44f) - corner.z);
+                }
+        return bounds.center + direction * (distance * 1.08f);
+    }
 
     public void BeginRaceIntro(Transform runner, Transform competitor, GiantGorillaChaser chaser)
     {
         if (view == null) view = GetComponent<Camera>();
         raceIntro = true;
         raceIntroReturning = false;
-        var bounds = new Bounds(runner.position + Vector3.up, new Vector3(9f, 3f, 6f));
-        foreach (var root in new[] { runner, competitor, chaser != null ? chaser.transform : null })
-        {
-            if (root == null) continue;
-            foreach (var renderer in root.GetComponentsInChildren<SkinnedMeshRenderer>()) bounds.Encapsulate(renderer.bounds);
-        }
-        introLookPoint = bounds.center + Vector3.up * 1.6f;
-        introFov = 62f;
-        Vector3 direction = new Vector3(0.025f, 0.32f, 1f).normalized;
-        introRotation = Quaternion.LookRotation(-direction, Vector3.up);
-        float tanVertical = Mathf.Tan(introFov * Mathf.Deg2Rad * 0.5f);
-        float tanHorizontal = tanVertical * (view != null ? view.aspect : 0.5625f);
-        float distance = 6f;
-        // Fit the complete group on phones and tablets, including the chaser's head.
-        for (int x = -1; x <= 1; x += 2)
-            for (int y = -1; y <= 1; y += 2)
-                for (int z = -1; z <= 1; z += 2)
-                {
-                    Vector3 corner = Quaternion.Inverse(introRotation) *
-                        (bounds.center - introLookPoint + Vector3.Scale(bounds.extents, new Vector3(x, y, z)));
-                    distance = Mathf.Max(distance, Mathf.Abs(corner.x) / Mathf.Max(0.1f, tanHorizontal) - corner.z,
-                        Mathf.Abs(corner.y) / tanVertical - corner.z);
-                }
-        introPosition = introLookPoint + direction * (distance * 1.08f);
+        storyShot = false;
+        introAge = 0f;
+        introFov = 58f;
+        Bounds guardian = StoryIntroduction.VisualBounds(chaser != null ? chaser.transform : runner);
+        guardianFocus = guardian.center;
+        guardianPosition = FrameSubject(guardian, new Vector3(0.08f, 0.2f, 1f), introFov);
+        Bounds opponent = StoryIntroduction.VisualBounds(competitor != null ? competitor : runner);
+        rivalFocus = opponent.center + Vector3.up * opponent.extents.y * 0.18f;
+        rivalPosition = FrameSubject(opponent, new Vector3(-0.6f, 0.3f, 1f), introFov);
+        introPosition = guardianPosition;
+        introLookPoint = guardianFocus;
     }
 
     public void ShakeRaceIntro() => introShakeAge = 0f;
@@ -109,33 +135,71 @@ public class RunnerCamera : MonoBehaviour
         if (!raceIntro) return;
         raceIntro = false;
         raceIntroReturning = true;
+        // Start the handoff at the pose already visible on the last countdown frame.
+        introPosition = transform.position;
+        introRotation = transform.rotation;
+        introFov = view != null ? view.fieldOfView : 58f;
         introReturnAge = 0f;
         introReturnDuration = Mathf.Max(0.1f, seconds);
     }
 
     private void ApplyRaceIntro()
     {
+        if (storyShot)
+        {
+            float storyEase = Mathf.SmoothStep(0f, 1f, storyProgress);
+            Vector3 position = Vector3.Lerp(storyPosition, storyFocus + (storyPosition - storyFocus) * 0.94f, storyEase);
+            position += storyRight * Mathf.Sin(storyEase * Mathf.PI) * 0.3f;
+            transform.position = position;
+            // Put the subject in the unobscured viewport between the caption and header.
+            Vector3 focus = storyFocus - Vector3.up * Vector3.Distance(position, storyFocus) * 0.055f;
+            transform.rotation = Quaternion.LookRotation(focus - position, Vector3.up);
+            if (view != null) view.fieldOfView = 56f;
+            return;
+        }
         if (!raceIntro && !raceIntroReturning) return;
-        if (raceIntroReturning) introReturnAge += Time.deltaTime;
-        float t = raceIntro ? 0f : Mathf.SmoothStep(0f, 1f, introReturnAge / introReturnDuration);
         Vector3 followPosition = transform.position;
         Quaternion followRotation = transform.rotation;
-        // Crane above the clear track instead of orbiting through roadside trees.
-        Vector3 control = (introPosition + followPosition) * 0.5f + Vector3.up * 4f;
-        transform.position = (1f - t) * (1f - t) * introPosition + 2f * (1f - t) * t * control + t * t * followPosition;
-        float focusDistance = Vector3.Distance(followPosition, target.position + Vector3.up);
-        Vector3 followFocus = followPosition + followRotation * Vector3.forward * focusDistance;
-        Vector3 movingIntroFocus = introLookPoint + Vector3.forward * (target.position.z - levelStartZ);
-        Vector3 runnersFocus = (raceRival != null ? (target.position + raceRival.position) * 0.5f : target.position) + Vector3.up;
-        Vector3 focus = Vector3.Lerp(movingIntroFocus, runnersFocus, Mathf.SmoothStep(0f, 1f, t * 2f));
-        focus = Vector3.Lerp(focus, followFocus, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.65f, 1f, t)));
-        transform.rotation = Quaternion.LookRotation(focus - transform.position, Vector3.up);
+        if (raceIntro)
+        {
+            introAge += Time.deltaTime;
+            float duration = RaceStartSequence.Instance != null ? RaceStartSequence.Instance.CountdownSeconds : 3.5f;
+            float phase = Mathf.Clamp01(introAge / duration);
+            if (phase < 0.4f)
+            {
+                float sweep = Mathf.SmoothStep(0f, 1f, phase / 0.4f);
+                introPosition = Vector3.Lerp(guardianPosition, rivalPosition, sweep);
+                introLookPoint = Vector3.Lerp(guardianFocus, rivalFocus, sweep);
+                transform.SetPositionAndRotation(introPosition, Quaternion.LookRotation(introLookPoint - introPosition));
+            }
+            else
+            {
+                float sweep = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.4f, 0.96f, phase));
+                // A side crane goes over the runners, rather than crossing their bodies.
+                Vector3 control = (rivalPosition + followPosition) * 0.5f + Vector3.up * 4f + Vector3.left * 2f;
+                float inverse = 1f - sweep;
+                transform.position = inverse * inverse * rivalPosition + 2f * inverse * sweep * control + sweep * sweep * followPosition;
+                Quaternion startRotation = Quaternion.LookRotation(rivalFocus - rivalPosition);
+                transform.rotation = Quaternion.Slerp(startRotation, followRotation, sweep);
+            }
+            if (view != null) view.fieldOfView = Mathf.Lerp(58f, view.fieldOfView, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.4f, 0.96f, phase)));
+            ApplyIntroShake(1f - phase);
+            return;
+        }
+        if (raceIntroReturning) introReturnAge += Time.deltaTime;
+        float t = Mathf.SmoothStep(0f, 1f, introReturnAge / introReturnDuration);
+        transform.position = Vector3.Lerp(introPosition, followPosition, t);
+        transform.rotation = Quaternion.Slerp(introRotation, followRotation, t);
         if (view != null) view.fieldOfView = Mathf.Lerp(introFov, view.fieldOfView, t);
+        if (t >= 1f) raceIntroReturning = false;
+    }
+
+    private void ApplyIntroShake(float weight)
+    {
         introShakeAge += Time.deltaTime;
-        float shake = 0.045f * Mathf.Exp(-4f * introShakeAge) * (1f - t);
+        float shake = 0.045f * Mathf.Exp(-4f * introShakeAge) * weight;
         transform.position += transform.right * (Mathf.Sin(introShakeAge * 47f) * shake)
             + transform.up * (Mathf.Sin(introShakeAge * 61f) * shake * 0.6f);
-        if (t >= 1f) raceIntroReturning = false;
     }
 
     private void Start()

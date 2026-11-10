@@ -35,6 +35,10 @@ public sealed class RaceStartSequence : MonoBehaviour
     private int currentBeat = -1;
     private Canvas gameplayCanvas;
     private bool gameplayCanvasWasEnabled;
+    private StoryIntroduction story;
+    private RaceNarrativeCallouts narrative;
+    private bool countdownBegan;
+    public bool IsStoryPlaying => story != null && story.IsPlaying;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() => Instance = null;
@@ -65,20 +69,37 @@ public sealed class RaceStartSequence : MonoBehaviour
         }
         gate?.ResetClosed();
         gorilla?.BeginStartingIntimidation();
-        if (raceCamera != null) raceCamera.BeginRaceIntro(player.transform, rival != null ? rival.transform : null, gorilla);
         countdownUI = RaceCountdownUI.Create(transform);
+        countdownUI.Hide();
         audioSource = gameObject.AddComponent<AudioSource>();
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0f;
         audioSource.volume = countdownVolume;
         // Reserve a clear runway even for hand-placed obstacles near the start.
         ClearStartingRunway();
+        narrative = gameObject.AddComponent<RaceNarrativeCallouts>();
+        narrative.Configure(player, gorilla);
+        story = StoryIntroduction.Create(transform, player, rival, gorilla, raceCamera);
+        story.Begin();
+    }
+
+    private void BeginCountdown()
+    {
+        countdownBegan = true;
+        Elapsed = 0f;
+        if (raceCamera != null) raceCamera.BeginRaceIntro(player.transform, rival != null ? rival.transform : null, gorilla);
         ShowCountdownBeat(0);
     }
 
     private void Update()
     {
         if (!began || Time.deltaTime <= 0f) return;
+        if (!countdownBegan)
+        {
+            if (IsStoryPlaying) return;
+            BeginCountdown();
+            return;
+        }
         // Do not count the Start frame's delta: the first cue only began this frame.
         if (Time.frameCount == firstBeatFrame) return;
         Elapsed += Time.deltaTime;
@@ -114,6 +135,7 @@ public sealed class RaceStartSequence : MonoBehaviour
         gorilla?.EndStartingIntimidation();
         raceCamera?.EndRaceIntro(cameraReturnSeconds);
         RestoreGameplayHUD();
+        narrative?.ShowMission();
         player.GetComponent<MonkeyFootstepDust>()?.EmitStartPuff();
         if (rival != null)
         {
@@ -165,6 +187,7 @@ public sealed class RaceStartSequence : MonoBehaviour
             raceCamera?.EndRaceIntro(cameraReturnSeconds);
         }
         countdownUI?.Hide();
+        story?.Cancel();
         RestoreGameplayHUD();
         if (audioSource != null) audioSource.Stop();
         Instance = null;
