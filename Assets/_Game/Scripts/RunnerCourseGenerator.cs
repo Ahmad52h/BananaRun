@@ -68,8 +68,12 @@ public class RunnerCourseGenerator : MonoBehaviour
     public int PatternCount { get; private set; }
     public int HighBananaPathCount { get; private set; }
     public GameObject BananaPrefab => bananaPrefab;
+    public GameObject[] SceneryPrefabs => sceneryPrefabs;
+    public GameObject RoadsideShrubPrefab => roadsideShrubPrefab;
+    public float GroundHeight => groundHeight;
     public int RopeBananaCount => ropeBananaCount;
     public RunnerMotor Player => player;
+    public float FinishZ => finishLine != null ? finishLine.position.z : transform.position.z;
     public float Progress01 => progressSource != null && player != null ? progressSource.ProgressAt(player.transform.position.z) : 0f;
     public float Difficulty => player != null ? DifficultyAt(player.transform.position.z) : 0f;
     public float CurrentHazardSpeedMultiplier => Mathf.Lerp(1f, maxHazardSpeedMultiplier, Difficulty);
@@ -286,21 +290,32 @@ public class RunnerCourseGenerator : MonoBehaviour
                             groundHeight + 1.1f, Mathf.Lerp(previousEnd + 0.2f, z - back - 0.2f, t)));
                     }
             }
-            if (coconutPrefab != null && row % 3 == 0)
-                SpawnPickup(coconutPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
-            if (bombPickupPrefab != null && row % 4 == 2)
-                SpawnPickup(bombPickupPrefab, new Vector3(centerX + safeLane * laneWidth, groundHeight + 0.8f, z + 5));
+            // Paired pickups sit just past the obstacle row, where both chosen
+            // lanes are clear, so neither runner can monopolise the rewards.
+            float pairZ = z + front + 1f;
+            if (row % 3 == 0)
+            {
+                bool coconutLeft = row % 2 == 0;
+                if (coconutPrefab != null)
+                    SpawnPickup(coconutPrefab, new Vector3(centerX + (coconutLeft ? -1 : 1) * laneWidth,
+                        groundHeight + 0.8f, pairZ));
+                if (bombPickupPrefab != null)
+                    SpawnPickup(bombPickupPrefab, new Vector3(centerX + (coconutLeft ? 1 : -1) * laneWidth,
+                        groundHeight + 0.8f, pairZ));
+            }
             if (powerUpPrefabs != null && powerUpPrefabs.Length > 0 && z >= nextPowerUp)
             {
                 int kind = powerIndex++ % powerUpPrefabs.Length;
-                if (powerUpPrefabs[kind] != null)
+                var primary = powerUpPrefabs[kind];
+                if (primary != null && TrySpawnPowerUpPair(primary.Type, centerX, laneWidth, safeLane, pairZ, row))
                 {
-                    SpawnPowerUp(powerUpPrefabs[kind], new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z + 1));
                     lastPowerUpZ = z;
-                    if (powerUpPrefabs[kind].Type == PowerUpType.Thunder) thunderSpawned = true;
-                    if (powerUpPrefabs[kind].Type == PowerUpType.Glider && bananaPrefab != null && random.NextDouble() < highBananaFrequency)
+                    PowerUpType partnerType = PartnerFor(primary.Type);
+                    if (primary.Type == PowerUpType.Thunder || partnerType == PowerUpType.Thunder)
+                        thunderSpawned = true;
+                    if (primary.Type == PowerUpType.Glider && bananaPrefab != null && random.NextDouble() < highBananaFrequency)
                     {
-                        float arcStart = z + 1f + player.MaximumForwardSpeed * 0.8f;
+                        float arcStart = pairZ + player.MaximumForwardSpeed * 0.8f;
                         float arcLength = player.SpeedAtDifficulty(difficulty) * player.HighJumpDuration;
                         float arcEnd = arcStart + arcLength;
                         if (arcEnd + ReactionDistance < end && (arcEnd < gapStart - 18f || arcStart > gapEnd + 18f) &&
@@ -332,15 +347,15 @@ public class RunnerCourseGenerator : MonoBehaviour
         // reusing the final safe row is a last-resort fallback.
         if (!thunderSpawned && powerUpPrefabs != null)
         {
-            int thunderIndex = -1;
+            bool hasThunder = false;
             for (int i = 0; i < powerUpPrefabs.Length; i++)
                 if (powerUpPrefabs[i] != null && powerUpPrefabs[i].Type == PowerUpType.Thunder)
                 {
-                    thunderIndex = i;
+                    hasThunder = true;
                     break;
                 }
 
-            if (thunderIndex >= 0)
+            if (hasThunder)
             {
                 bool found = false;
                 Section target = default;
@@ -364,8 +379,9 @@ public class RunnerCourseGenerator : MonoBehaviour
 
                 if (found)
                 {
-                    SpawnPowerUp(powerUpPrefabs[thunderIndex],
-                        new Vector3(centerX + target.SafeLane * laneWidth, groundHeight + 1.15f, target.Z + 1f));
+                    float pairZ = Mathf.Min(target.End + 1f, end - 1f);
+                    TrySpawnPowerUpPair(PowerUpType.Thunder, centerX, laneWidth,
+                        target.SafeLane, pairZ, sections.Count);
                 }
             }
         }
@@ -544,17 +560,60 @@ public class RunnerCourseGenerator : MonoBehaviour
             }
             if (selected < 0) continue;
             var target = sections[selected];
-            foreach (var prefab in powerUpPrefabs)
+            float pairZ = Mathf.Min(target.End + 1f, ProceduralTrackStartup.AuthoredOpeningEnd - 2f);
+            if (TrySpawnPowerUpPair(types[i], player.CenterX, player.LaneDistance,
+                target.SafeLane, pairZ, selected))
             {
-                if (prefab == null || prefab.Type != types[i]) continue;
-                SpawnPowerUp(prefab, new Vector3(player.CenterX + target.SafeLane * player.LaneDistance,
-                    groundHeight + 1.15f, target.Z + 1f));
                 previous = target.Z;
-                if (types[i] == PowerUpType.Thunder) thunder = true;
-                break;
+                if (types[i] == PowerUpType.Thunder || PartnerFor(types[i]) == PowerUpType.Thunder)
+                    thunder = true;
             }
         }
         return thunder;
+    }
+
+    /// <summary>
+    /// Fixed complement pairs so a single pickup line never hands every ability
+    /// to whichever runner happens to be leading.
+    /// </summary>
+    private static PowerUpType PartnerFor(PowerUpType type)
+    {
+        switch (type)
+        {
+            case PowerUpType.Shield: return PowerUpType.Thunder;
+            case PowerUpType.Thunder: return PowerUpType.Magnet;
+            case PowerUpType.Magnet: return PowerUpType.Shield;
+            case PowerUpType.Bulldozer: return PowerUpType.Thunder;
+            case PowerUpType.Glider: return PowerUpType.Shield;
+            default: return PowerUpType.Shield;
+        }
+    }
+
+    private PowerUpPickup FindPowerUpPrefab(PowerUpType type)
+    {
+        if (powerUpPrefabs == null) return null;
+        foreach (var prefab in powerUpPrefabs)
+            if (prefab != null && prefab.Type == type) return prefab;
+        return null;
+    }
+
+    /// <summary>Spawns the primary ability and its partner in two different lanes at one Z.</summary>
+    private bool TrySpawnPowerUpPair(PowerUpType primaryType, float centerX, float laneWidth,
+        int safeLane, float z, int parity)
+    {
+        var primary = FindPowerUpPrefab(primaryType);
+        if (primary == null) return false;
+        SpawnPowerUp(primary, new Vector3(centerX + safeLane * laneWidth, groundHeight + 1.15f, z));
+
+        int partnerLane = safeLane == 0 ? (parity % 2 == 0 ? -1 : 1) : 0;
+        if (partnerLane != safeLane)
+        {
+            var partner = FindPowerUpPrefab(PartnerFor(primaryType));
+            if (partner != null)
+                SpawnPowerUp(partner, new Vector3(centerX + partnerLane * laneWidth,
+                    groundHeight + 1.15f, z));
+        }
+        return true;
     }
 
     private void SpawnPowerUp(PowerUpPickup prefab, Vector3 position)

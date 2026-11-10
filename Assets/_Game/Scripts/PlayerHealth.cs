@@ -21,6 +21,7 @@ public class PlayerHealth : MonoBehaviour
     public bool IsProjectileStunned => !(powerUps != null && powerUps.HasThunder) && Time.time < projectileStunEndsAt;
     public float ProjectileStunRemaining => Mathf.Max(0f, projectileStunEndsAt - Time.time);
     public bool IsProtected => Time.time < protectionEndsAt ||
+        Time.time < projectileProtectionEndsAt ||
         (powerUps != null && powerUps.IsActive(PowerUpType.Bulldozer));
 
     public event Action<int> HeartsChanged;
@@ -56,11 +57,15 @@ public class PlayerHealth : MonoBehaviour
         if (powerUps != null && powerUps.ConsumeShield()) return;
 
         Hearts = Mathf.Max(0, Hearts - 1);
-        protectionEndsAt = Time.time + protectionDuration;
+        protectionEndsAt = Mathf.Max(protectionEndsAt, Time.time +
+            Mathf.Max(protectionDuration, CompetitiveBalance.RecoveryImmunitySeconds));
         if (damageFlash == null) damageFlash = DamageFlashUI.GetOrCreate();
         damageFlash?.TriggerDamageFlash();
         RunnerAudio.Instance?.PlayHurt();
         HitTaken?.Invoke();
+        // RunnerAnimation applies its stumble slowdown from HitTaken, so the
+        // burst is scheduled to begin as that slowdown finishes.
+        motor?.ApplyRecoveryBurst();
 
         if (IsDead)
         {
@@ -88,7 +93,7 @@ public class PlayerHealth : MonoBehaviour
         {
             Hearts = Mathf.Max(0, Hearts - 1);
             damaged = true;
-            protectionEndsAt = Time.time + 1.5f;
+            protectionEndsAt = Mathf.Max(protectionEndsAt, Time.time + CompetitiveBalance.RecoveryImmunitySeconds);
             if (damageFlash == null) damageFlash = DamageFlashUI.GetOrCreate();
             damageFlash?.TriggerDamageFlash();
             RunnerAudio.Instance?.PlayHurt();
@@ -126,7 +131,9 @@ public class PlayerHealth : MonoBehaviour
         if (runnerInput != null) runnerInput.enabled = true;
         projectileStunEndsAt = Mathf.Min(projectileStunEndsAt, Time.time);
         projectileProtectionEndsAt = Mathf.Min(projectileProtectionEndsAt, Time.time);
-        protectionEndsAt = Mathf.Max(protectionEndsAt, Time.time + Mathf.Max(0.1f, invulnerability));
+        protectionEndsAt = Mathf.Max(protectionEndsAt, Time.time +
+            Mathf.Max(0.1f, invulnerability, CompetitiveBalance.RecoveryImmunitySeconds));
+        motor?.ApplyRecoveryBurst();
     }
 
     public bool TakeProjectileHit()
@@ -141,9 +148,10 @@ public class PlayerHealth : MonoBehaviour
             return false;
         }
         projectileStunEndsAt = Time.time + projectileStunDuration;
-        projectileProtectionEndsAt = projectileStunEndsAt + 0.4f;
+        projectileProtectionEndsAt = projectileStunEndsAt + CompetitiveBalance.RecoveryImmunitySeconds;
         RunnerAudio.Instance?.PlayHurt();
         ProjectileHit?.Invoke();
+        motor?.ApplyRecoveryBurst(projectileStunDuration);
         return true;
     }
     public void EndRun()

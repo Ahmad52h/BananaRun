@@ -43,6 +43,7 @@ public class RunnerMotor : MonoBehaviour
     private float slowdownStarted;
     private float slowdownDuration;
     private float slowdownMultiplier = 1f;
+    private float recoveryBurstStartedAt, recoveryBurstEndsAt, recoveryBurstBonus;
     private PowerUpManager powerUps;
     private PlayerHealth health;
     private MonkeyFootstepDust dustEffects;
@@ -117,9 +118,29 @@ public class RunnerMotor : MonoBehaviour
             float speed = SpeedAtDifficulty(difficultySource != null ? difficultySource.Difficulty : 0f) * (slowdownDuration > 0f
                 ? Mathf.Lerp(slowdownMultiplier, 1f, Mathf.Clamp01((Time.time - slowdownStarted) / slowdownDuration))
                 : 1f);
-            if (powerUps != null && powerUps.HasThunder) speed *= PowerUpManager.ThunderSpeedMultiplier;
-            return speed;
+            if (powerUps != null && powerUps.HasThunder) speed *= powerUps.SpeedMultiplier;
+            return speed * RecoveryBurstMultiplier;
         }
+    }
+
+    public float RecoveryBurstMultiplier => CompetitiveBalance.RecoveryBurstMultiplier(
+        Time.time, recoveryBurstStartedAt, recoveryBurstEndsAt, recoveryBurstBonus);
+
+    /// <summary>
+    /// Starts a short acceleration burst once the current stumble/stun ends.
+    /// Passing a delay schedules it for that many seconds from now instead.
+    /// </summary>
+    public void ApplyRecoveryBurst(float delaySeconds = 0f)
+    {
+        if (health != null && health.IsRunOver) return;
+        float start = Time.time + Mathf.Max(0f, delaySeconds);
+        float slowdownEnd = slowdownStarted + slowdownDuration;
+        if (Time.time < slowdownEnd) start = Mathf.Max(start, slowdownEnd);
+        float end = start + CompetitiveBalance.RecoveryBurstSeconds;
+        if (end <= recoveryBurstEndsAt) return;
+        recoveryBurstStartedAt = start;
+        recoveryBurstEndsAt = end;
+        recoveryBurstBonus = CompetitiveBalance.RecoveryBurstSpeedBonus;
     }
 
     public void ApplySlowdown(float multiplier, float duration)

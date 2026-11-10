@@ -32,7 +32,7 @@ public sealed class ProceduralTrackPool : MonoBehaviour
                 foreach (var value in Bananas) if (value != null && value.IsCollected) return true;
                 foreach (var value in Coconuts) if (value != null && value.IsCollected) return true;
                 foreach (var value in Bombs) if (value != null && value.IsCollected) return true;
-                foreach (var value in Powers) if (value != null && value.IsCollected) return true;
+                foreach (var value in Powers) if (value != null && value.IsCollected && !value.IsPendingRespawn) return true;
                 foreach (var value in Obstacles) if (value != null && value.IsBroken) return true;
                 foreach (var value in Peels) if (value != null && value.IsConsumed) return true;
                 return false;

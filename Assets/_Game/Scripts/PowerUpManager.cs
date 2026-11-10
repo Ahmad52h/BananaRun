@@ -14,7 +14,6 @@ public class PowerUpManager : MonoBehaviour
     public const float MagnetDurationSeconds = 7f;
     public const float ShieldDurationSeconds = 8f;
     public const float ThunderDurationSeconds = 4f;
-    public const float ThunderSpeedMultiplier = 1.35f;
     public static PowerUpManager ActivePlayer { get; private set; }
 
     [Header("Durations")]
@@ -25,6 +24,13 @@ public class PowerUpManager : MonoBehaviour
     [SerializeField, Min(0.1f)] private float thunderDuration = ThunderDurationSeconds;
     [SerializeField, Min(1f)] private float magnetRadius = 8f;
     [SerializeField, Min(1)] private int bulldozerPointsPerObstacle = 5;
+    [Header("Thunder catch-up scaling")]
+    [Tooltip("Boost applied when Thunder is collected more than 4 m ahead of the rival.")]
+    [SerializeField, Range(0f, 1f)] private float leadingThunderBonus = CompetitiveBalance.LeaderThunderSpeedBonus;
+    [Tooltip("Boost applied when Thunder is collected while trailing or neck-and-neck.")]
+    [SerializeField, Range(0f, 1f)] private float trailingThunderBonus = CompetitiveBalance.TrailerThunderSpeedBonus;
+    [SerializeField, Min(0.1f)] private float leadingThunderDuration = CompetitiveBalance.LeaderThunderSeconds;
+    [SerializeField, Min(0.1f)] private float trailingThunderDuration = CompetitiveBalance.TrailerThunderSeconds;
     [Header("Visuals")]
     [SerializeField] private Transform playerModel;
     [SerializeField, Min(1f)] private float giantScale = 1.7f;
@@ -52,10 +58,12 @@ public class PowerUpManager : MonoBehaviour
     private PlayerHealth health;
     private RunnerAbilityVisual abilityVisual;
     private float nextModelLookup;
+    private float activeThunderDuration;
+    private float activeThunderMultiplier = 1f;
     public float MagnetRadius => magnetRadius;
     public bool HasShield => IsActive(PowerUpType.Shield);
     public bool HasThunder => IsActive(PowerUpType.Thunder);
-    public float SpeedMultiplier => HasThunder ? ThunderSpeedMultiplier : 1f;
+    public float SpeedMultiplier => HasThunder ? activeThunderMultiplier : 1f;
     public int BonusPoints { get; private set; }
     public event Action<int> BonusPointsChanged;
 
@@ -72,6 +80,7 @@ public class PowerUpManager : MonoBehaviour
         if (GetComponent<RunnerAbilityVisual>() == null)
             gameObject.AddComponent<RunnerAbilityVisual>();
         abilityVisual = GetComponent<RunnerAbilityVisual>();
+        activeThunderDuration = Mathf.Max(0.1f, thunderDuration);
         for (int i = 0; i < timerPrefixes.Length; i++)
             timerPrefixes[i] = "<color=#" + ColorUtility.ToHtmlStringRGB(PowerUpVisualUtility.ColorFor((PowerUpType)i)) +
                 ">" + ((PowerUpType)i).ToString().ToUpperInvariant() + "</color> ";
@@ -101,7 +110,7 @@ public class PowerUpManager : MonoBehaviour
             case PowerUpType.Glider: return gliderDuration;
             case PowerUpType.Magnet: return magnetDuration;
             case PowerUpType.Shield: return shieldDuration;
-            case PowerUpType.Thunder: return thunderDuration;
+            case PowerUpType.Thunder: return activeThunderDuration;
             default: return 1f;
         }
     }
@@ -109,6 +118,17 @@ public class PowerUpManager : MonoBehaviour
     public void Activate(PowerUpType type)
     {
         if (health != null && health.IsRunOver) return;
+        if (type == PowerUpType.Thunder)
+        {
+            // Position at collection decides whether Thunder rewards a leader
+            // or gives the chaser a real catch-up window.
+            float rivalZ = RivalRunner.ActiveRival != null
+                ? RivalRunner.ActiveRival.transform.position.z
+                : float.NegativeInfinity;
+            bool leading = CompetitiveBalance.IsLeading(transform.position.z, rivalZ);
+            activeThunderMultiplier = 1f + Mathf.Max(0f, leading ? leadingThunderBonus : trailingThunderBonus);
+            activeThunderDuration = Mathf.Max(0.1f, leading ? leadingThunderDuration : trailingThunderDuration);
+        }
         endsAt[(int)type] = Time.time + DurationFor(type);
         RunnerMagnetTargets.Invalidate();
         displayedType = type;

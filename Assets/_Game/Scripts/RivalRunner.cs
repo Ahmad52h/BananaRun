@@ -17,6 +17,13 @@ public sealed class RivalRunner : MonoBehaviour
     [SerializeField, Min(0.1f)] private float fallDuration = 1.5f;
     [SerializeField, Min(0.1f)] private float slideDuration = 0.95f;
     [SerializeField, Min(0.1f)] private float projectileStunDuration = 2f;
+    [Header("Thunder catch-up scaling")]
+    [Tooltip("Boost applied when the rival collects Thunder more than 4 m ahead of the player.")]
+    [SerializeField, Range(0f, 1f)] private float leadingThunderBonus = CompetitiveBalance.LeaderThunderSpeedBonus;
+    [Tooltip("Boost applied when the rival collects Thunder while trailing or neck-and-neck.")]
+    [SerializeField, Range(0f, 1f)] private float trailingThunderBonus = CompetitiveBalance.TrailerThunderSpeedBonus;
+    [SerializeField, Min(0.1f)] private float leadingThunderDuration = CompetitiveBalance.LeaderThunderSeconds;
+    [SerializeField, Min(0.1f)] private float trailingThunderDuration = CompetitiveBalance.TrailerThunderSeconds;
     [SerializeField, Min(1f)] private float magnetRadius = 8f;
     [Header("Obstacle Avoidance")]
     [Tooltip("Forward scan length. At top speed the rival needs roughly a full second of warning.")]
@@ -74,6 +81,8 @@ public sealed class RivalRunner : MonoBehaviour
     private BananaInventory inventory;
     private float projectileStunEndsAt, projectileProtectionEndsAt;
     private float shieldEndsAt, thunderEndsAt, magnetEndsAt, highJumpEndsAt, bulldozerEndsAt;
+    private float thunderSpeedMultiplier = 1f;
+    private float recoveryBurstStartedAt, recoveryBurstEndsAt, recoveryBurstBonus;
     private bool gliderJump;
     private bool highJumpRequested;
     private bool bombLaunched;
@@ -113,8 +122,15 @@ public sealed class RivalRunner : MonoBehaviour
     public event System.Action Impacted;
     private float RunningPace => player == null ? 0f :
         player.SpeedAtDifficulty(course != null ? course.DifficultyAt(transform.position.z) : 0f) * paceMultiplier;
+    /// <summary>Soft elastic leash, applied only to base pace (never to Thunder/setbacks).</summary>
+    private float LeashMultiplier => player == null ? 1f :
+        CompetitiveBalance.RivalLeashMultiplier(transform.position.z - player.transform.position.z,
+            course != null ? course.FinishZ - transform.position.z : float.PositiveInfinity);
+    private float RecoveryBurstMultiplier => CompetitiveBalance.RecoveryBurstMultiplier(
+        Time.time, recoveryBurstStartedAt, recoveryBurstEndsAt, recoveryBurstBonus);
     public float CurrentSpeed => RaceStartSequence.IsHolding || HasFinished || recoveringFall || IsProjectileStunned ? 0f :
-        RunningPace * (IsStumbling ? setbackMultiplier : 1f) * (HasThunder ? PowerUpManager.ThunderSpeedMultiplier : 1f);
+        RunningPace * LeashMultiplier * (IsStumbling ? setbackMultiplier : 1f) *
+        (HasThunder ? thunderSpeedMultiplier : 1f) * RecoveryBurstMultiplier;
     private float EffectiveLookAhead => Mathf.Max(lookAhead, detectionRange);
 
     private void Awake()
@@ -528,7 +544,7 @@ public sealed class RivalRunner : MonoBehaviour
 
             var banana = TrackColliderCache.Get(bananaProbes[i]).Banana;
             var powerUp = TrackColliderCache.Get(bananaProbes[i]).PowerUp;
-            if (powerUp != null && powerUp.isActiveAndEnabled)
+            if (powerUp != null && powerUp.isActiveAndEnabled && !powerUp.IsPendingRespawn)
             {
                 score += 6f / Mathf.Max(2f, ahead);
                 continue;
@@ -708,10 +724,15 @@ public sealed class RivalRunner : MonoBehaviour
                 shieldEndsAt = Time.time + PowerUpManager.ShieldDurationSeconds;
                 break;
             case PowerUpType.Thunder:
-                thunderEndsAt = Time.time + PowerUpManager.ThunderDurationSeconds;
+            {
+                bool leading = player != null &&
+                    CompetitiveBalance.IsLeading(transform.position.z, player.transform.position.z);
+                thunderSpeedMultiplier = 1f + Mathf.Max(0f, leading ? leadingThunderBonus : trailingThunderBonus);
+                thunderEndsAt = Time.time + Mathf.Max(0.1f, leading ? leadingThunderDuration : trailingThunderDuration);
                 setbackEndsAt = Mathf.Min(setbackEndsAt, Time.time);
                 projectileStunEndsAt = Mathf.Min(projectileStunEndsAt, Time.time);
                 break;
+            }
             default:
                 return false;
         }
@@ -806,9 +827,10 @@ public sealed class RivalRunner : MonoBehaviour
             return false;
         }
         projectileStunEndsAt = Time.time + projectileStunDuration;
-        projectileProtectionEndsAt = projectileStunEndsAt + 0.4f;
+        projectileProtectionEndsAt = projectileStunEndsAt + CompetitiveBalance.RecoveryImmunitySeconds;
         setbackEndsAt = Mathf.Max(setbackEndsAt, projectileStunEndsAt);
-        protectedUntil = Mathf.Max(protectedUntil, projectileStunEndsAt + 0.4f);
+        protectedUntil = Mathf.Max(protectedUntil, projectileStunEndsAt + CompetitiveBalance.RecoveryImmunitySeconds);
+        ApplyRecoveryBurst(projectileStunDuration);
         if (animator != null)
         {
             animator.SetBool("Sliding", false);
@@ -828,12 +850,28 @@ public sealed class RivalRunner : MonoBehaviour
         bombLaunched = true;
         verticalVelocity = Mathf.Max(1f, launchSpeed);
         projectileStunEndsAt = Time.time + Mathf.Max(0.1f, stunSeconds);
-        projectileProtectionEndsAt = projectileStunEndsAt + 0.4f;
+        projectileProtectionEndsAt = projectileStunEndsAt + CompetitiveBalance.RecoveryImmunitySeconds;
         setbackEndsAt = Mathf.Max(setbackEndsAt, projectileStunEndsAt);
+        protectedUntil = Mathf.Max(protectedUntil, projectileStunEndsAt + CompetitiveBalance.RecoveryImmunitySeconds);
+        ApplyRecoveryBurst(stunSeconds);
         var playerAnimation = player != null ? player.GetComponent<RunnerAnimation>() : null;
         RunnerHitReaction.Play(animator, playerAnimation != null ? playerAnimation.HitClipLength : 1f, stunSeconds);
         animationState = HitState;
         return true;
+    }
+
+    /// <summary>
+    /// Schedules the short acceleration burst that follows a stun/stumble so a
+    /// single mistake does not end the rivalry. A later, longer window wins.
+    /// </summary>
+    private void ApplyRecoveryBurst(float delaySeconds)
+    {
+        float start = Time.time + Mathf.Max(0f, delaySeconds);
+        float end = start + CompetitiveBalance.RecoveryBurstSeconds;
+        if (end <= recoveryBurstEndsAt) return;
+        recoveryBurstStartedAt = start;
+        recoveryBurstEndsAt = end;
+        recoveryBurstBonus = CompetitiveBalance.RecoveryBurstSpeedBonus;
     }
 
     public void Stumble(float duration = -1f)
@@ -845,8 +883,9 @@ public sealed class RivalRunner : MonoBehaviour
             return;
         }
         setbackEndsAt = Time.time + (duration > 0f ? duration : stumbleDuration);
-        protectedUntil = setbackEndsAt + 0.75f;
+        protectedUntil = setbackEndsAt + CompetitiveBalance.RecoveryImmunitySeconds;
         setbackMultiplier = 0.25f;
+        ApplyRecoveryBurst(Mathf.Max(0f, setbackEndsAt - Time.time));
         if (animator != null)
         {
             animator.SetBool("Sliding", false);
@@ -863,7 +902,8 @@ public sealed class RivalRunner : MonoBehaviour
         ResetSlide();
         jumping = false;
         setbackEndsAt = Time.time + (duration > 0f ? duration : fallDuration);
-        protectedUntil = setbackEndsAt + 0.75f;
+        protectedUntil = setbackEndsAt + CompetitiveBalance.RecoveryImmunitySeconds;
+        ApplyRecoveryBurst(Mathf.Max(0f, setbackEndsAt - Time.time));
         if (animator != null) animator.SetFloat("StumbleSpeed", 1f / Mathf.Max(0.1f, setbackEndsAt - Time.time));
         Animate(HitState);
         Impacted?.Invoke();
@@ -885,6 +925,8 @@ public sealed class RivalRunner : MonoBehaviour
         setbackEndsAt = Time.time;
         projectileStunEndsAt = Time.time;
         projectileProtectionEndsAt = Time.time;
+        recoveryBurstStartedAt = recoveryBurstEndsAt = Time.time;
+        recoveryBurstBonus = 0f;
     }
 
     /// <summary>Resumes the rival on the far bank after the water delay.</summary>
@@ -907,7 +949,8 @@ public sealed class RivalRunner : MonoBehaviour
         setbackMultiplier = 1f;
         projectileStunEndsAt = Time.time;
         projectileProtectionEndsAt = Time.time;
-        protectedUntil = Time.time + Mathf.Max(0.1f, invulnerability);
+        protectedUntil = Time.time + Mathf.Max(0.1f, invulnerability, CompetitiveBalance.RecoveryImmunitySeconds);
+        ApplyRecoveryBurst(0f);
         lastGroundedPosition = position;
         if (animator != null)
         {

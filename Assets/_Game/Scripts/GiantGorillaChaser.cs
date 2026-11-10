@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -33,6 +34,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField] private float visualYaw;
     [Tooltip("Local offset for the spawned visual. X shifts the gorilla out of the camera's center so the player stays visible; Y fine-tunes the auto-grounding.")]
     [SerializeField] private Vector3 visualOffset = new Vector3(1.2f, 0f, 0f);
+
+    [Header("Grounding")]
+    [Tooltip("Road top used when no enabled ground collider answers the downward probe (the authored start road is collision-less).")]
+    [SerializeField] private float roadHeightFallback = -0.3f;
 
     [Header("Visibility Windows")]
     [Tooltip("Distance behind the hit runner where the gorilla surges into view.")]
@@ -71,10 +76,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float gruntVolume = 0.8f;
 
     private readonly Collider[] obstacleHits = new Collider[24];
+    private readonly RaycastHit[] groundHits = new RaycastHit[16];
     private PlayerHealth health;
     private RunnerAnimation playerAnimation;
     private Transform chaseTarget;
-    private float chaseGroundY;
     private bool subscribedToRival;
     private RunnerCourseGenerator generator;
     private GameObject modelInstance;
@@ -137,8 +142,11 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         startingIntimidation = true;
         visibility = VisibilityState.HitReveal;
         currentGap = 4.5f;
-        transform.position = player.transform.position - Vector3.forward * currentGap - Vector3.right * 2.6f;
+        Vector3 startPosition = player.transform.position - Vector3.forward * currentGap - Vector3.right * 2.6f;
+        startPosition.y = ResolveGroundY(startPosition.x, startPosition.z);
+        transform.position = startPosition;
         SetGorillaVisible(true);
+        AlignVisualFeetToRoad(transform.position.y);
         gorillaAnimator.speed = 1f;
         gorillaAnimator.Play("Base Layer.StartIdle", 0, 0f);
     }
@@ -191,7 +199,6 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (rival == null) rival = FindAnyObjectByType<RivalRunner>();
         playerAnimation = player.GetComponent<RunnerAnimation>();
         chaseTarget = player.transform;
-        chaseGroundY = player.transform.position.y;
         generator = FindAnyObjectByType<RunnerCourseGenerator>();
         modelInstance = Instantiate(gorillaModel, transform);
         modelInstance.name = "Gorilla Visual";
@@ -277,10 +284,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
         visibility = VisibilityState.Hidden;
         currentGap = hiddenGap;
-        transform.position = new Vector3(
-            player.transform.position.x,
-            player.transform.position.y,
-            player.transform.position.z - Mathf.Max(2f, hiddenGap));
+        Vector3 hiddenPosition = player.transform.position - Vector3.forward * Mathf.Max(2f, hiddenGap);
+        hiddenPosition.y = ResolveGroundY(hiddenPosition.x, hiddenPosition.z);
+        transform.position = hiddenPosition;
         SetGorillaVisible(false);
         initialized = true;
         // Imported model colliders stay disabled. This receiver follows the logical running lane.
@@ -341,7 +347,12 @@ public sealed class GiantGorillaChaser : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (startingIntimidation) { PoseStartingRoar(); return; }
+        if (startingIntimidation)
+        {
+            SnapGorillaToRoad();
+            PoseStartingRoar();
+            return;
+        }
         if (RaceStartSequence.IsHolding) return;
         if (player == null || health == null || !player.gameObject.activeInHierarchy)
         {
@@ -541,8 +552,78 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         Vector3 target = chaseTarget != null ? chaseTarget.position : player.transform.position;
         float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, laneDelay);
         float z = Mathf.SmoothDamp(transform.position.z, target.z - currentGap, ref forwardVelocity, forwardSmoothing);
-        transform.position = new Vector3(x, Mathf.Max(chaseGroundY, target.y), z);
+        transform.position = new Vector3(x, ResolveGroundY(x, z), z);
         transform.rotation = Quaternion.identity;
+        if (gorillaVisible) AlignVisualFeetToRoad(transform.position.y);
+    }
+
+    /// <summary>Keep the chaser root on the road/deck while the opening camera holds on it.</summary>
+    private void SnapGorillaToRoad()
+    {
+        Vector3 position = transform.position;
+        position.y = ResolveGroundY(position.x, position.z);
+        transform.position = position;
+        if (gorillaVisible) AlignVisualFeetToRoad(position.y);
+    }
+
+    /// <summary>
+    /// The authored start road has no live collider, so fall back to the known
+    /// road top. Extension ground and bridge decks answer the probe first.
+    /// </summary>
+    private float ResolveGroundY(float x, float z)
+    {
+        if (BridgeDeck.TryGetHeight(new Vector3(x, 0f, z), out float deckHeight))
+            return deckHeight;
+
+        const float probeTop = 20f;
+        int count = Physics.RaycastNonAlloc(new Vector3(x, probeTop, z), Vector3.down,
+            groundHits, probeTop + 80f, ~0, QueryTriggerInteraction.Ignore);
+        float highest = float.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = groundHits[i];
+            if (!IsRoadSurface(hit.collider)) continue;
+            if (hit.point.y > highest) highest = hit.point.y;
+        }
+        return highest > float.NegativeInfinity ? highest : roadHeightFallback;
+    }
+
+    private static bool IsRoadSurface(Collider collider)
+    {
+        if (collider == null) return false;
+        if (collider.GetComponentInParent<BridgeDeck>() != null) return true;
+        for (Transform node = collider.transform; node != null; node = node.parent)
+        {
+            string name = node.name;
+            if (name.IndexOf("ground", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("terrain", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("dirt", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("walkway", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("bridge deck", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Skinned bounds can lift slightly away from the root as the idle/run clip
+    /// plays. Re-seat the lowest rendered point on the road every visible frame
+    /// so the gorilla never floats above its shadow.
+    /// </summary>
+    private void AlignVisualFeetToRoad(float roadY)
+    {
+        if (modelInstance == null || gorillaRenderers == null) return;
+        float lowest = float.PositiveInfinity;
+        for (int i = 0; i < gorillaRenderers.Length; i++)
+        {
+            Renderer renderer = gorillaRenderers[i];
+            if (renderer == null || !renderer.enabled) continue;
+            lowest = Mathf.Min(lowest, renderer.bounds.min.y);
+        }
+        if (float.IsPositiveInfinity(lowest)) return;
+        float correction = roadY - lowest;
+        if (Mathf.Abs(correction) <= 0.0015f) return;
+        modelInstance.transform.position += Vector3.up * correction;
     }
 
     private void SetGorillaVisible(bool visible)
@@ -573,10 +654,9 @@ public sealed class GiantGorillaChaser : MonoBehaviour
         if (gorillaAnimator != null) gorillaAnimator.speed = 0f;
         if (player != null)
         {
-            transform.position = new Vector3(
-                player.transform.position.x,
-                player.transform.position.y,
-                player.transform.position.z - Mathf.Max(2f, hiddenGap));
+            Vector3 hiddenPosition = player.transform.position - Vector3.forward * Mathf.Max(2f, hiddenGap);
+            hiddenPosition.y = ResolveGroundY(hiddenPosition.x, hiddenPosition.z);
+            transform.position = hiddenPosition;
         }
     }
 
@@ -724,8 +804,10 @@ public sealed class GiantGorillaChaser : MonoBehaviour
     {
         Vector3 target = player.transform.position;
         float x = Mathf.SmoothDamp(transform.position.x, target.x, ref laneVelocity, catchLaneSmoothing);
-        transform.position = new Vector3(x, target.y, target.z - currentGap);
+        float z = target.z - currentGap;
+        transform.position = new Vector3(x, ResolveGroundY(x, z), z);
         transform.rotation = Quaternion.identity;
+        if (gorillaVisible) AlignVisualFeetToRoad(transform.position.y);
     }
 
     private float GetCatchStateTime()

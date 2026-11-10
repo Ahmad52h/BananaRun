@@ -15,14 +15,32 @@ public class PowerUpPickup : MonoBehaviour
 
     private const string BtmResourceFolder = "PowerUps/";
     private bool collected;
+    private bool respawning;
+    private bool appearing;
+    private bool trailingIsRival;
+    private float respawnAt;
+    private float appearStartedAt;
     private Transform visualPivot;
+    private SphereCollider sphereCollider;
+    private Vector3 visualPivotBaseScale = Vector3.one;
     private float bobPhase;
 
     public PowerUpType Type => type;
     public bool IsCollected => collected;
+    public bool IsPendingRespawn => respawning;
     internal void ResetForSpawn()
     {
         collected = false;
+        respawning = false;
+        appearing = false;
+        respawnAt = 0f;
+        if (sphereCollider == null) sphereCollider = GetComponent<SphereCollider>();
+        if (sphereCollider != null) sphereCollider.enabled = true;
+        if (visualPivot != null)
+        {
+            visualPivot.gameObject.SetActive(true);
+            visualPivot.localScale = visualPivotBaseScale;
+        }
         AlignToGround();
     }
     public ParticleSystem CollectionEffect => collectionEffect;
@@ -58,6 +76,7 @@ public class PowerUpPickup : MonoBehaviour
     private void Awake()
     {
         var sphere = GetComponent<SphereCollider>();
+        sphereCollider = sphere;
         sphere.isTrigger = true;
         var body = GetComponent<Rigidbody>();
         body.isKinematic = true;
@@ -77,6 +96,7 @@ public class PowerUpPickup : MonoBehaviour
         visualPivot.localPosition = new Vector3(0f, hoverHeight, 0f);
         foreach (var child in originalChildren)
             child.SetParent(visualPivot, false);
+        visualPivotBaseScale = visualPivot.localScale;
 
         if (UsesBtmVisual(type))
             ReplaceWithBtmVisual();
@@ -210,6 +230,21 @@ public class PowerUpPickup : MonoBehaviour
 
     private void Update()
     {
+        if (respawning)
+        {
+            if (Time.time < respawnAt) return;
+            // The chaser has already run past this slot; respawning would only
+            // hand the leader a free second pickup, so the slot retires.
+            if (TrailingRunnerHasPassed())
+            {
+                respawning = false;
+                collected = true;
+                return;
+            }
+            BeginRespawnAppear();
+        }
+
+        if (appearing) UpdateRespawnAppear();
         if (collected || visualPivot == null) return;
 
         // Keep the requested smooth 120 deg/sec display spin independent of the
@@ -219,13 +254,52 @@ public class PowerUpPickup : MonoBehaviour
         visualPivot.localPosition = new Vector3(0f, hoverHeight + bob, 0f);
     }
 
+    private bool TrailingRunnerHasPassed()
+    {
+        float trailingZ = float.NegativeInfinity;
+        if (trailingIsRival)
+        {
+            if (RivalRunner.ActiveRival != null) trailingZ = RivalRunner.ActiveRival.transform.position.z;
+        }
+        else if (PowerUpManager.ActivePlayer != null)
+            trailingZ = PowerUpManager.ActivePlayer.transform.position.z;
+        return trailingZ >= transform.position.z - CompetitiveBalance.PickupRespawnPassedMargin;
+    }
+
+    private void BeginRespawnAppear()
+    {
+        respawning = false;
+        appearing = true;
+        appearStartedAt = Time.time;
+        if (sphereCollider != null) sphereCollider.enabled = true;
+        if (visualPivot == null) return;
+        visualPivot.gameObject.SetActive(true);
+        visualPivot.localScale = visualPivotBaseScale * 0.01f;
+    }
+
+    private void UpdateRespawnAppear()
+    {
+        float t = Mathf.Clamp01((Time.time - appearStartedAt) /
+            CompetitiveBalance.PickupRespawnScaleInSeconds);
+        float eased = 1f - Mathf.Pow(1f - t, 3f);
+        if (visualPivot != null)
+            visualPivot.localScale = visualPivotBaseScale * Mathf.Max(0.01f, eased);
+        if (t >= 1f) appearing = false;
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        if (collected) return;
+        if (collected || respawning) return;
         var manager = other.GetComponentInParent<PowerUpManager>();
         bool player = manager != null && manager.CompareTag("Player");
         var rival = player ? null : other.GetComponentInParent<RivalRunner>();
         if (!player && rival == null) return;
+
+        float collectorZ = player ? manager.transform.position.z : rival.transform.position.z;
+        float otherZ = player
+            ? (RivalRunner.ActiveRival != null ? RivalRunner.ActiveRival.transform.position.z : float.PositiveInfinity)
+            : (rival.Player != null ? rival.Player.transform.position.z : float.PositiveInfinity);
+        bool leading = CompetitiveBalance.IsLeading(collectorZ, otherZ);
 
         if (player)
         {
@@ -240,9 +314,22 @@ public class PowerUpPickup : MonoBehaviour
             if (!rival.CollectPowerUp(type)) return;
         }
 
-        collected = true;
         PlayCollectionEffect(player);
-        gameObject.SetActive(false);
+        if (leading)
+        {
+            // The leader's pickup becomes a timed second chance for the chaser
+            // instead of being permanently removed, keeping both lanes relevant.
+            trailingIsRival = player;
+            respawning = true;
+            respawnAt = Time.time + CompetitiveBalance.PickupRespawnDelaySeconds;
+            if (sphereCollider != null) sphereCollider.enabled = false;
+            if (visualPivot != null) visualPivot.gameObject.SetActive(false);
+        }
+        else
+        {
+            collected = true;
+            gameObject.SetActive(false);
+        }
     }
 
     private void PlayCollectionEffect(bool withAudio)

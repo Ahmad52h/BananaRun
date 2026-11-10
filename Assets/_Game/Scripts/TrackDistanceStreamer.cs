@@ -10,6 +10,14 @@ public sealed class TrackDistanceStreamer : MonoBehaviour
 {
     public const float BehindCameraDistance = 15f;
     public const float AheadRunnerDistance = 110f;
+    /// <summary>Chunk-aligned back edge of the intro jungle window.</summary>
+    public const float IntroBackZ = -96f;
+    /// <summary>Forward edge that must stay live while the intro camera looks around the start.</summary>
+    public const float IntroAheadZ = 110f;
+    /// <summary>Once both runners are past this Z, the negative-Z intro set is retired.</summary>
+    public const float IntroExitRunnerZ = 40f;
+    /// <summary>Everything behind this line is intro-only scenery.</summary>
+    public const float IntroNegativeCullZ = -5f;
     private const float RefreshInterval = 0.1f;
     private static TrackDistanceStreamer active;
 
@@ -36,6 +44,7 @@ public sealed class TrackDistanceStreamer : MonoBehaviour
     public float MaxRunnerZ { get; private set; }
     public float CullBehindZ { get; private set; }
     public float RenderAheadZ { get; private set; }
+    public bool IsIntroWindow { get; private set; }
     public int RegisteredCount => entries.Count;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -115,8 +124,23 @@ public sealed class TrackDistanceStreamer : MonoBehaviour
         float rivalZ = rival != null ? rival.position.z : playerZ;
         MinRunnerZ = Mathf.Min(playerZ, rivalZ);
         MaxRunnerZ = Mathf.Max(playerZ, rivalZ);
+
+        // The opening story/countdown camera looks backwards at the gorilla.
+        // Keep the whole clearing live until both runners have genuinely left it.
+        IsIntroWindow = RaceStartSequence.IsHolding || MinRunnerZ < IntroExitRunnerZ;
         CullBehindZ = trackCamera.transform.position.z - BehindCameraDistance;
         RenderAheadZ = MaxRunnerZ + AheadRunnerDistance;
+        if (IsIntroWindow)
+        {
+            CullBehindZ = Mathf.Min(CullBehindZ, IntroBackZ);
+            RenderAheadZ = Mathf.Max(RenderAheadZ, IntroAheadZ);
+        }
+        else
+        {
+            // After the escape, reclaim the whole negative-Z intro set even if
+            // a cinematic camera briefly lags behind the runners.
+            CullBehindZ = Mathf.Max(CullBehindZ, IntroNegativeCullZ);
+        }
         return true;
     }
 
@@ -246,7 +270,7 @@ public sealed class TrackDistanceStreamer : MonoBehaviour
         entry.Consumed = (entry.Banana != null && entry.Banana.IsCollected) ||
             (entry.Coconut != null && entry.Coconut.IsCollected) ||
             (entry.Bomb != null && entry.Bomb.IsCollected) ||
-            (entry.PowerUp != null && entry.PowerUp.IsCollected) ||
+            (entry.PowerUp != null && entry.PowerUp.IsCollected && !entry.PowerUp.IsPendingRespawn) ||
             (!entry.Hidden && !entry.Object.activeSelf);
         if (entry.Consumed) return;
 

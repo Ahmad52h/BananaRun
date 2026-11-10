@@ -49,11 +49,14 @@ public class TropicalScenery : MonoBehaviour
             for (int i = 0; i < pool.Length; i++) pool[i] = new Queue<GameObject>();
         }
         float length = Mathf.Max(5f, chunkLength);
-        int first = Mathf.Max(0, Mathf.FloorToInt((player.position.z - behindDistance) / length));
+        // Negative indices are valid: the intro camera looks back toward the
+        // starting-line jungle, so the border generator must be able to build
+        // chunks behind Z = 0. The streamer's intro window decides how far back.
+        int first = Mathf.FloorToInt((player.position.z - behindDistance) / length);
         int last = Mathf.CeilToInt((player.position.z + aheadDistance) / length);
         if (TrackDistanceStreamer.TryGetWindow(out float cullBehindZ, out float renderAheadZ))
         {
-            first = Mathf.Max(0, Mathf.FloorToInt(cullBehindZ / length));
+            first = Mathf.FloorToInt(cullBehindZ / length);
             last = Mathf.CeilToInt(renderAheadZ / length);
         }
         if (finishLine != null) last = Mathf.Min(last, Mathf.CeilToInt((finishLine.position.z + 24) / length));
